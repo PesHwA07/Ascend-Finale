@@ -29,10 +29,10 @@ type Sentinel struct {
 }
 
 // NewSentinel creates a Sentinel that checks every interval.
-// Default interval is 2 seconds if zero is passed.
+// Default interval is 5 seconds if zero is passed.
 func NewSentinel(sim *simulation.Simulation, bus *events.Bus, interval time.Duration) *Sentinel {
 	if interval <= 0 {
-		interval = 2 * time.Second
+		interval = 5 * time.Second
 	}
 	return &Sentinel{
 		sim:       sim,

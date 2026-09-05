@@ -34,10 +34,10 @@ type Reconciler struct {
 }
 
 // NewReconciler creates a Reconciler that checks every interval.
-// Default interval is 5 seconds if zero is passed.
+// Default interval is 10 seconds if zero is passed.
 func NewReconciler(sim *simulation.Simulation, bus *events.Bus, interval time.Duration) *Reconciler {
 	if interval <= 0 {
-		interval = 5 * time.Second
+		interval = 10 * time.Second
 	}
 	return &Reconciler{
 		sim:      sim,
