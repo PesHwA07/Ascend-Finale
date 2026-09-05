@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/PesHwA07/Ascend-Finale/internal/events"
 	"github.com/PesHwA07/Ascend-Finale/internal/model"
 	"github.com/PesHwA07/Ascend-Finale/internal/simulation"
 )
@@ -42,7 +43,8 @@ type applyResponse struct {
 // dashboardFS is the embedded filesystem containing dashboard assets,
 // passed in from main.go where the go:embed directive lives.
 // sim is the simulation engine providing node access and aggregation.
-func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation) error {
+// bus is the event bus for real-time WebSocket push to the dashboard.
+func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *events.Bus) error {
 	// Serve the dashboard directory from the embedded FS.
 	// Sub into "dashboard" because the embed path includes the directory name.
 	sub, err := fs.Sub(dashboardFS, "dashboard")
@@ -50,10 +52,17 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation) error 
 		return fmt.Errorf("failed to sub into dashboard FS: %w", err)
 	}
 
+	// Start WebSocket hub for real-time event push
+	hub := newWSHub(bus)
+	go hub.run()
+
 	mux := http.NewServeMux()
 
 	// Serve static dashboard files
 	mux.Handle("/", http.FileServer(http.FS(sub)))
+
+	// WebSocket endpoint for real-time events
+	mux.HandleFunc("/ws", hub.handleWebSocket)
 
 	// Health check endpoint — useful for verifying the server is up
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +141,17 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation) error 
 			AuthoritativeGlobal: authGlobal,
 		}
 
+		bus.Publish(events.Event{
+			Type:    events.EventOperationApplied,
+			NodeID:  req.NodeID,
+			Message: fmt.Sprintf("Applied %d ops (amount=%d) to %s", len(ops), req.Amount, req.NodeID),
+			Data: map[string]interface{}{
+				"applied":       len(ops),
+				"naive_global":  resp.NaiveGlobal,
+				"auth_global":   resp.AuthoritativeGlobal,
+			},
+		})
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	})
@@ -162,6 +182,20 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation) error 
 			http.Error(w, fmt.Sprintf("crash failed: %v", err), http.StatusInternalServerError)
 			return
 		}
+
+		bus.Publish(events.Event{
+			Type:    events.EventCrashInjected,
+			NodeID:  req.NodeID,
+			Message: fmt.Sprintf("CRASH %s: deleted %d ops, localVal %d → %d, epoch %d → %d",
+				req.NodeID, result.DeletedCount, result.OldLocalValue, result.NewLocalValue, result.OldEpoch, result.NewEpoch),
+			Data: map[string]interface{}{
+				"deleted_count":   result.DeletedCount,
+				"old_local_value": result.OldLocalValue,
+				"new_local_value": result.NewLocalValue,
+				"old_epoch":       result.OldEpoch,
+				"new_epoch":       result.NewEpoch,
+			},
+		})
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)
@@ -217,6 +251,19 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation) error 
 			return
 		}
 
+		bus.Publish(events.Event{
+			Type:    events.EventReconciliationDone,
+			NodeID:  req.NodeID,
+			Message: fmt.Sprintf("RECONCILE %s: found %d missing, replayed %d, localVal %d → %d",
+				req.NodeID, result.MissingCount, result.ReplayedCount, result.OldLocalValue, result.RecoveredValue),
+			Data: map[string]interface{}{
+				"missing_count":   result.MissingCount,
+				"replayed_count":  result.ReplayedCount,
+				"old_local_value": result.OldLocalValue,
+				"recovered_value": result.RecoveredValue,
+			},
+		})
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)
 	})
@@ -246,6 +293,18 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation) error 
 			http.Error(w, fmt.Sprintf("replay failed: %v", err), http.StatusInternalServerError)
 			return
 		}
+
+		bus.Publish(events.Event{
+			Type:    events.EventReplayRejected,
+			NodeID:  req.NodeID,
+			Message: fmt.Sprintf("REPLAY %s: attempted %d, dups_ignored=%d, new_inserts=%d",
+				req.NodeID, result.AttemptedCount, result.DuplicatesIgnored, result.NewInserts),
+			Data: map[string]interface{}{
+				"attempted_count":    result.AttemptedCount,
+				"duplicates_ignored": result.DuplicatesIgnored,
+				"new_inserts":        result.NewInserts,
+			},
+		})
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)

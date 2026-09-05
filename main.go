@@ -7,6 +7,7 @@ import (
 
 	"github.com/PesHwA07/Ascend-Finale/internal/config"
 	"github.com/PesHwA07/Ascend-Finale/internal/db"
+	"github.com/PesHwA07/Ascend-Finale/internal/events"
 	"github.com/PesHwA07/Ascend-Finale/internal/server"
 	"github.com/PesHwA07/Ascend-Finale/internal/simulation"
 )
@@ -55,10 +56,14 @@ func main() {
 	auth, _ := sim.AuthoritativeGlobalValue()
 	log.Printf("Global values — naive: %d, authoritative: %d", naive, auth)
 
-	// 5. Start HTTP server (blocks)
+	// 5. Create event bus for real-time WebSocket push
+	bus := events.NewBus(200)
+	log.Println("Event bus initialized")
+
+	// 6. Start HTTP server (blocks)
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	log.Printf("CounterGhost dashboard: http://localhost:%d", cfg.Port)
-	if err := server.Start(addr, dashboardFS, sim); err != nil {
+	if err := server.Start(addr, dashboardFS, sim, bus); err != nil {
 		log.Fatalf("HTTP server error: %v", err)
 	}
 }
