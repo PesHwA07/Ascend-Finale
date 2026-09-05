@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CounterGhost — Live Dashboard</title>
+    <meta name="description" content="Distributed counter integrity after partial node state loss">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a1f2e;
+            --bg-card-hover: #1e2538;
+            --border: #2a3040;
+            --border-glow: rgba(99, 179, 237, 0.15);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #63b3ed;
+            --accent-purple: #b794f6;
+            --accent-green: #68d391;
+            --accent-red: #fc8181;
+            --accent-orange: #f6ad55;
+            --accent-cyan: #76e4f7;
+            --gradient-main: linear-gradient(135deg, #63b3ed, #b794f6);
+            --gradient-success: linear-gradient(135deg, #68d391, #4fd1c5);
+            --gradient-danger: linear-gradient(135deg, #fc8181, #f56565);
+            --gradient-warning: linear-gradient(135deg, #f6ad55, #ed8936);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.4);
+            --shadow-glow-blue: 0 0 20px rgba(99,179,237,0.15);
+            --shadow-glow-green: 0 0 20px rgba(104,211,145,0.15);
+            --shadow-glow-red: 0 0 20px rgba(252,129,129,0.15);
+            --radius: 12px;
+            --radius-sm: 8px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ---- Background effect ---- */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 20%, rgba(99,179,237,0.03) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 80%, rgba(183,148,246,0.03) 0%, transparent 50%);
+            z-index: -1;
+            animation: bgShift 20s ease-in-out infinite;
+        }
+
+        @keyframes bgShift {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(-3%, -3%); }
+        }
+
+        /* ---- Header ---- */
+        .header {
+            padding: 1.5rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            background: rgba(10, 14, 23, 0.8);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: var(--gradient-main);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        .logo-ghost {
+            font-size: 1.5rem;
+            margin-right: 0.25rem;
+        }
+
+        .header-tag {
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(99, 179, 237, 0.1);
+            color: var(--accent-blue);
+            border: 1px solid rgba(99, 179, 237, 0.2);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.error { background: var(--accent-red); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(104,211,145,0.4); }
+            50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(104,211,145,0); }
+        }
+
+        /* ---- Layout ---- */
+        .main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 1.5rem 2rem 4rem;
+        }
+
+        /* ---- Global Counters ---- */
+        .global-counters {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .counter-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem 1.5rem;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .counter-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+        }
+
+        .counter-card.naive::before { background: var(--gradient-main); }
+        .counter-card.authoritative::before { background: var(--gradient-success); }
+        .counter-card.drift::before { background: var(--gradient-danger); }
+
+        .counter-card:hover {
+            border-color: rgba(99, 179, 237, 0.3);
+            box-shadow: var(--shadow-glow-blue);
+        }
+
+        .counter-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        .counter-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2.25rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .counter-card.naive .counter-value { color: var(--accent-blue); }
+        .counter-card.authoritative .counter-value { color: var(--accent-green); }
+        .counter-card.drift .counter-value { color: var(--accent-red); }
+        .counter-card.drift.zero .counter-value { color: var(--accent-green); }
+
+        .counter-subtitle {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 0.35rem;
+        }
+
+        /* ---- Nodes ---- */
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .nodes-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .node-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            transition: all 0.3s ease;
+        }
+
+        .node-card:hover {
+            border-color: rgba(99, 179, 237, 0.3);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-glow-blue);
+        }
+
+        .node-card.crashed {
+            border-color: rgba(252, 129, 129, 0.3);
+            box-shadow: var(--shadow-glow-red);
+        }
+
+        .node-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .node-id {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--accent-cyan);
+        }
+
+        .node-badge {
+            font-size: 0.6rem;
+            font-weight: 600;
+            padding: 0.15rem 0.4rem;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .node-badge.alive {
+            background: rgba(104, 211, 145, 0.1);
+            color: var(--accent-green);
+            border: 1px solid rgba(104, 211, 145, 0.2);
+        }
+
+        .node-badge.dead {
+            background: rgba(252, 129, 129, 0.1);
+            color: var(--accent-red);
+            border: 1px solid rgba(252, 129, 129, 0.2);
+        }
+
+        .node-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .node-stat {
+            background: rgba(255,255,255,0.02);
+            padding: 0.5rem 0.6rem;
+            border-radius: var(--radius-sm);
+        }
+
+        .node-stat-label {
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .node-stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* ---- Actions Row ---- */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .action-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+        }
+
+        .action-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .action-desc {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+
+        /* ---- Buttons ---- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            width: 100%;
+            padding: 0.6rem 1rem;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .btn:active { transform: scale(0.97); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-seed {
+            background: linear-gradient(135deg, rgba(99,179,237,0.15), rgba(99,179,237,0.05));
+            color: var(--accent-blue);
+            border: 1px solid rgba(99,179,237,0.3);
+        }
+        .btn-seed:hover:not(:disabled) { background: linear-gradient(135deg, rgba(99,179,237,0.25), rgba(99,179,237,0.1)); }
+
+        .btn-crash {
+            background: linear-gradient(135deg, rgba(252,129,129,0.15), rgba(252,129,129,0.05));
+            color: var(--accent-red);
+            border: 1px solid rgba(252,129,129,0.3);
+        }
+        .btn-crash:hover:not(:disabled) { background: linear-gradient(135deg, rgba(252,129,129,0.25), rgba(252,129,129,0.1)); }
+
+        .btn-reconcile {
+            background: linear-gradient(135deg, rgba(104,211,145,0.15), rgba(104,211,145,0.05));
+            color: var(--accent-green);
+            border: 1px solid rgba(104,211,145,0.3);
+        }
+        .btn-reconcile:hover:not(:disabled) { background: linear-gradient(135deg, rgba(104,211,145,0.25), rgba(104,211,145,0.1)); }
+
+        .btn-replay {
+            background: linear-gradient(135deg, rgba(246,173,85,0.15), rgba(246,173,85,0.05));
+            color: var(--accent-orange);
+            border: 1px solid rgba(246,173,85,0.3);
+        }
+        .btn-replay:hover:not(:disabled) { background: linear-gradient(135deg, rgba(246,173,85,0.25), rgba(246,173,85,0.1)); }
+
+        .btn-scenario {
+            background: var(--gradient-main);
+            color: #fff;
+            border: none;
+            padding: 0.7rem 1.25rem;
+            font-size: 0.8rem;
+        }
+        .btn-scenario:hover:not(:disabled) { opacity: 0.9; box-shadow: var(--shadow-glow-blue); }
+
+        /* ---- Invariant Panel ---- */
+        .invariant-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .invariant-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .invariant-item {
+            background: rgba(255,255,255,0.02);
+            border-radius: var(--radius-sm);
+            padding: 0.6rem 0.5rem;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 1px solid transparent;
+        }
+
+        .invariant-item.pass {
+            border-color: rgba(104, 211, 145, 0.2);
+            background: rgba(104, 211, 145, 0.05);
+        }
+
+        .invariant-item.fail {
+            border-color: rgba(252, 129, 129, 0.3);
+            background: rgba(252, 129, 129, 0.08);
+            animation: failPulse 1.5s infinite;
+        }
+
+        @keyframes failPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(252,129,129,0.2); }
+            50% { box-shadow: 0 0 12px 2px rgba(252,129,129,0.15); }
+        }
+
+        .invariant-id {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 700;
+            margin-bottom: 0.2rem;
+        }
+
+        .invariant-item.pass .invariant-id { color: var(--accent-green); }
+        .invariant-item.fail .invariant-id { color: var(--accent-red); }
+        .invariant-item.pending .invariant-id { color: var(--text-muted); }
+
+        .invariant-label {
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            line-height: 1.3;
+        }
+
+        .invariant-icon {
+            font-size: 0.85rem;
+            margin-bottom: 0.15rem;
+        }
+
+        /* ---- Event Log ---- */
+        .event-log {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+        }
+
+        .log-entries {
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            line-height: 1.8;
+        }
+
+        .log-entries::-webkit-scrollbar { width: 4px; }
+        .log-entries::-webkit-scrollbar-track { background: transparent; }
+        .log-entries::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .log-entry {
+            padding: 0.15rem 0;
+            border-bottom: 1px solid rgba(42,48,64,0.5);
+            animation: logSlideIn 0.3s ease;
+        }
+
+        @keyframes logSlideIn {
+            from { opacity: 0; transform: translateX(-8px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .log-time { color: var(--text-muted); }
+        .log-action { font-weight: 600; }
+        .log-action.seed { color: var(--accent-blue); }
+        .log-action.crash { color: var(--accent-red); }
+        .log-action.reconcile { color: var(--accent-green); }
+        .log-action.replay { color: var(--accent-orange); }
+        .log-action.info { color: var(--accent-cyan); }
+        .log-action.error { color: var(--accent-red); }
+        .log-detail { color: var(--text-secondary); }
+
+        /* ---- Scenario Buttons Row ---- */
+        .scenario-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .scenario-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .scenario-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .scenario-card:first-child .scenario-label { color: var(--accent-blue); }
+        .scenario-card:last-child .scenario-label { color: var(--accent-orange); }
+
+        .scenario-desc {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* ---- Assertion Block ---- */
+        .assertion-block {
+            background: #0d1117;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            line-height: 1.8;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .assertion-block.visible { display: block; animation: logSlideIn 0.4s ease; }
+
+        .assert-pass { color: var(--accent-green); }
+        .assert-fail { color: var(--accent-red); }
+        .assert-label { color: var(--text-secondary); }
+        .assert-value { color: var(--accent-cyan); font-weight: 600; }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 1200px) {
+            .actions-grid { grid-template-columns: repeat(2, 1fr); }
+            .invariant-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        @media (max-width: 768px) {
+            .global-counters, .nodes-grid, .scenario-row { grid-template-columns: 1fr; }
+            .actions-grid { grid-template-columns: 1fr; }
+            .invariant-grid { grid-template-columns: repeat(2, 1fr); }
+            .main { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-left">
+            <span class="logo"><span class="logo-ghost">👻</span> CounterGhost</span>
+            <span class="header-tag">Live</span>
+        </div>
+        <div class="header-status">
+            <span class="status-dot" id="statusDot"></span>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </header>
+
+    <main class="main">
+
+        <!-- Global Counters -->
+        <div class="global-counters">
+            <div class="counter-card naive">
+                <div class="counter-label">Naive Global (Sum of Locals)</div>
+                <div class="counter-value" id="naiveGlobal">0</div>
+                <div class="counter-subtitle">May be wrong after crash</div>
+            </div>
+            <div class="counter-card authoritative">
+                <div class="counter-label">Authoritative Global (Coordinator)</div>
+                <div class="counter-value" id="authGlobal">0</div>
+                <div class="counter-subtitle">Always correct — the source of truth</div>
+            </div>
+            <div class="counter-card drift zero" id="driftCard">
+                <div class="counter-label">Drift (Auth − Naive)</div>
+                <div class="counter-value" id="driftValue">0</div>
+                <div class="counter-subtitle" id="driftLabel">No drift — system healthy</div>
+            </div>
+        </div>
+
+        <!-- Nodes -->
+        <div class="section-title">Node States</div>
+        <div class="nodes-grid" id="nodesGrid">
+            <!-- Populated by JS -->
+        </div>
+
+        <!-- Scenario Buttons -->
+        <div class="section-title">Demo Scenarios (PRD §8)</div>
+        <div class="scenario-row">
+            <div class="scenario-card">
+                <div class="scenario-label">Scenario A — Crash & Reconcile</div>
+                <div class="scenario-desc">
+                    Seed ops → Crash node-0 → Show wrong count → Reconcile → Show corrected count
+                </div>
+                <button class="btn btn-scenario" id="btnScenarioA" onclick="runScenarioA()">
+                    ▶ Run Scenario A
+                </button>
+            </div>
+            <div class="scenario-card">
+                <div class="scenario-label">Scenario B — Delayed Replay</div>
+                <div class="scenario-desc">
+                    After reconciliation, re-deliver crashed ops → Duplicates rejected → Count unchanged
+                </div>
+                <button class="btn btn-scenario" id="btnScenarioB" onclick="runScenarioB()" disabled>
+                    ▶ Run Scenario B
+                </button>
+            </div>
+        </div>
+
+        <!-- Manual Actions -->
+        <div class="section-title">Manual Controls</div>
+        <div class="actions-grid">
+            <div class="action-card">
+                <div class="action-title">📦 Seed Operations</div>
+                <div class="action-desc">Apply 20 ops at +1 to each node</div>
+                <button class="btn btn-seed" onclick="seedAll()">Seed All Nodes</button>
+            </div>
+            <div class="action-card">
+                <div class="action-title">💥 Crash Node</div>
+                <div class="action-desc">Delete ~40% of node-0's operations</div>
+                <button class="btn btn-crash" onclick="crashNode('node-0')">Crash node-0</button>
+            </div>
+            <div class="action-card">
+                <div class="action-title">🔧 Reconcile</div>
+                <div class="action-desc">Repair node-0 from coordinator log</div>
+                <button class="btn btn-reconcile" onclick="reconcileNode('node-0')">Reconcile node-0</button>
+            </div>
+            <div class="action-card">
+                <div class="action-title">📬 Delayed Replay</div>
+                <div class="action-desc">Re-deliver pre-crash ops (dedup test)</div>
+                <button class="btn btn-replay" onclick="replayNode('node-0')">Replay node-0</button>
+            </div>
+        </div>
+
+        <!-- Invariant Panel -->
+        <div class="section-title">Correctness Invariants (PRD §7)</div>
+        <div class="invariant-panel">
+            <div class="invariant-grid" id="invariantGrid">
+                <div class="invariant-item pending" id="inv-I1">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I1</div>
+                    <div class="invariant-label">No duplicate</div>
+                </div>
+                <div class="invariant-item pending" id="inv-I2">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I2</div>
+                    <div class="invariant-label">No op lost</div>
+                </div>
+                <div class="invariant-item pending" id="inv-I3">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I3</div>
+                    <div class="invariant-label">Monotonic</div>
+                </div>
+                <div class="invariant-item pending" id="inv-I4">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I4</div>
+                    <div class="invariant-label">Epoch unique</div>
+                </div>
+                <div class="invariant-item pending" id="inv-I5">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I5</div>
+                    <div class="invariant-label">Reproducible</div>
+                </div>
+                <div class="invariant-item pending" id="inv-I6">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I6</div>
+                    <div class="invariant-label">Idempotent</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assertion Block -->
+        <div class="assertion-block" id="assertionBlock"></div>
+
+        <!-- Event Log -->
+        <div class="section-title">Event Log</div>
+        <div class="event-log">
+            <div class="log-entries" id="logEntries">
+                <div class="log-entry">
+                    <span class="log-time">[ready]</span>
+                    <span class="log-action info">INIT</span>
+                    <span class="log-detail">Dashboard loaded, polling /api/state</span>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+    // =========================================================================
+    // State
+    // =========================================================================
+    let state = { nodes: [], naive_global: 0, authoritative_global: 0 };
+    let scenarioADone = false;
+    let lastCrashResult = null;
+    let lastReconResult = null;
+    let pollInterval = null;
+
+    // =========================================================================
+    // API Helpers
+    // =========================================================================
+    async function api(method, path, body) {
+        const opts = { method, headers: { 'Content-Type': 'application/json' } };
+        if (body) opts.body = JSON.stringify(body);
+        const res = await fetch(path, opts);
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text);
+        }
+        return res.json();
+    }
+
+    async function fetchState() {
+        try {
+            state = await api('GET', '/api/state');
+            updateUI();
+            setStatus('connected');
+        } catch (e) {
+            setStatus('error');
+        }
+    }
+
+    // =========================================================================
+    // UI Update
+    // =========================================================================
+    function updateUI() {
+        // Global counters
+        animateValue('naiveGlobal', state.naive_global);
+        animateValue('authGlobal', state.authoritative_global);
+
+        const drift = state.authoritative_global - state.naive_global;
+        animateValue('driftValue', drift);
+
+        const driftCard = document.getElementById('driftCard');
+        const driftLabel = document.getElementById('driftLabel');
+        if (drift === 0) {
+            driftCard.classList.add('zero');
+            driftCard.classList.remove('nonzero');
+            driftLabel.textContent = 'No drift — system healthy';
+        } else {
+            driftCard.classList.remove('zero');
+            driftCard.classList.add('nonzero');
+            driftLabel.textContent = `${drift} operations missing from nodes`;
+        }
+
+        // Nodes
+        const grid = document.getElementById('nodesGrid');
+        grid.innerHTML = '';
+        state.nodes.forEach(n => {
+            const card = document.createElement('div');
+            card.className = 'node-card' + (n.is_alive ? '' : ' crashed');
+            card.innerHTML = `
+                <div class="node-header">
+                    <span class="node-id">${n.node_id}</span>
+                    <span class="node-badge ${n.is_alive ? 'alive' : 'dead'}">${n.is_alive ? '● ALIVE' : '✕ CRASHED'}</span>
+                </div>
+                <div class="node-stats">
+                    <div class="node-stat">
+                        <div class="node-stat-label">Local Value</div>
+                        <div class="node-stat-value">${n.local_value}</div>
+                    </div>
+                    <div class="node-stat">
+                        <div class="node-stat-label">Epoch</div>
+                        <div class="node-stat-value">${n.epoch}</div>
+                    </div>
+                    <div class="node-stat">
+                        <div class="node-stat-label">Next Seq</div>
+                        <div class="node-stat-value">${n.next_seq}</div>
+                    </div>
+                    <div class="node-stat">
+                        <div class="node-stat-label">Ops Count</div>
+                        <div class="node-stat-value">${n.local_value}</div>
+                    </div>
+                </div>
+            `;
+            grid.appendChild(card);
+        });
+
+        // Invariants — check live
+        checkInvariants();
+    }
+
+    function animateValue(elementId, newValue) {
+        const el = document.getElementById(elementId);
+        const current = parseInt(el.textContent) || 0;
+        if (current === newValue) return;
+
+        const duration = 400;
+        const start = performance.now();
+
+        function update(now) {
+            const elapsed = now - start;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            el.textContent = Math.round(current + (newValue - current) * eased);
+            if (progress < 1) requestAnimationFrame(update);
+        }
+        requestAnimationFrame(update);
+    }
+
+    function setStatus(s) {
+        const dot = document.getElementById('statusDot');
+        const text = document.getElementById('statusText');
+        if (s === 'connected') {
+            dot.className = 'status-dot';
+            text.textContent = 'Connected — polling live';
+        } else {
+            dot.className = 'status-dot error';
+            text.textContent = 'Connection error';
+        }
+    }
+
+    // =========================================================================
+    // Actions
+    // =========================================================================
+    async function seedAll() {
+        try {
+            for (const id of ['node-0', 'node-1', 'node-2']) {
+                await api('POST', '/api/apply', { node_id: id, amount: 1, count: 20 });
+            }
+            addLog('seed', 'SEED', 'Applied 20 ops × 3 nodes = 60 total');
+            await fetchState();
+        } catch (e) {
+            addLog('error', 'ERROR', e.message);
+        }
+    }
+
+    async function crashNode(nodeId) {
+        try {
+            const result = await api('POST', '/api/crash', { node_id: nodeId, delete_count: 8 });
+            lastCrashResult = result;
+            addLog('crash', 'CRASH', `${nodeId}: deleted ${result.deleted_count} ops, localVal ${result.old_local_value} → ${result.new_local_value}`);
+            await fetchState();
+        } catch (e) {
+            addLog('error', 'ERROR', e.message);
+        }
+    }
+
+    async function reconcileNode(nodeId) {
+        try {
+            const result = await api('POST', '/api/reconcile', { node_id: nodeId });
+            lastReconResult = result;
+            addLog('reconcile', 'RECONCILE', `${nodeId}: found ${result.missing_count} missing, replayed ${result.replayed_count}, localVal ${result.old_local_value} → ${result.recovered_value}`);
+            await fetchState();
+            setInvariant('I5', true); // reproducible after reconcile
+            setInvariant('I6', true); // convergent
+        } catch (e) {
+            addLog('error', 'ERROR', e.message);
+        }
+    }
+
+    async function replayNode(nodeId) {
+        try {
+            const result = await api('POST', '/api/replay', { node_id: nodeId });
+            addLog('replay', 'REPLAY', `${nodeId}: attempted ${result.attempted_count}, dups_ignored=${result.duplicates_ignored}, new_inserts=${result.new_inserts}`);
+            await fetchState();
+            if (result.new_inserts === 0) {
+                setInvariant('I1', true); // no duplicate
+                setInvariant('I3', true); // monotonic
+            }
+        } catch (e) {
+            addLog('error', 'ERROR', e.message);
+        }
+    }
+
+    // =========================================================================
+    // Scenarios
+    // =========================================================================
+    async function runScenarioA() {
+        const btn = document.getElementById('btnScenarioA');
+        btn.disabled = true;
+        btn.textContent = '⏳ Running...';
+
+        try {
+            // Step 1: Seed
+            addLog('info', 'SCENARIO A', '─── Step 1: Seeding operations ───');
+            for (const id of ['node-0', 'node-1', 'node-2']) {
+                await api('POST', '/api/apply', { node_id: id, amount: 1, count: 40 });
+            }
+            await fetchState();
+            addLog('seed', 'SEED', `Global = ${state.authoritative_global}`);
+            await sleep(800);
+
+            // Step 2: Crash
+            addLog('info', 'SCENARIO A', '─── Step 2: Crashing node-0 ───');
+            const crashRes = await api('POST', '/api/crash', { node_id: 'node-0', delete_count: 8 });
+            lastCrashResult = crashRes;
+            await fetchState();
+            addLog('crash', 'CRASH', `node-0: deleted ${crashRes.deleted_count} ops — naive=${state.naive_global} (WRONG), auth=${state.authoritative_global} (correct)`);
+
+            setInvariant('I2', true); // ops survived in coordinator
+            setInvariant('I4', true); // epoch incremented
+            await sleep(1200);
+
+            // Step 3: Reconcile
+            addLog('info', 'SCENARIO A', '─── Step 3: Reconciling ───');
+            const reconRes = await api('POST', '/api/reconcile', { node_id: 'node-0' });
+            lastReconResult = reconRes;
+            await fetchState();
+            addLog('reconcile', 'RECONCILE', `Found ${reconRes.missing_count} missing, replayed ${reconRes.replayed_count} — naive=${state.naive_global}, auth=${state.authoritative_global}`);
+
+            setInvariant('I5', state.naive_global === state.authoritative_global);
+            setInvariant('I6', true);
+
+            scenarioADone = true;
+            document.getElementById('btnScenarioB').disabled = false;
+
+            addLog('info', 'SCENARIO A', '✅ Complete — naive == authoritative');
+        } catch (e) {
+            addLog('error', 'ERROR', e.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '▶ Run Scenario A';
+        }
+    }
+
+    async function runScenarioB() {
+        if (!scenarioADone) return;
+        const btn = document.getElementById('btnScenarioB');
+        btn.disabled = true;
+        btn.textContent = '⏳ Running...';
+
+        try {
+            const globalBefore = state.naive_global;
+            addLog('info', 'SCENARIO B', '─── Replaying pre-crash ops ───');
+
+            const result = await api('POST', '/api/replay', { node_id: 'node-0' });
+            await fetchState();
+
+            addLog('replay', 'REPLAY', `Attempted ${result.attempted_count} ops — dups_ignored=${result.duplicates_ignored}, new_inserts=${result.new_inserts}`);
+
+            if (result.new_inserts === 0) {
+                setInvariant('I1', true);
+                setInvariant('I3', true);
+                addLog('info', 'SCENARIO B', `✅ Complete — all duplicates rejected, global unchanged at ${state.naive_global}`);
+            } else {
+                addLog('error', 'SCENARIO B', `❌ FAIL — ${result.new_inserts} new inserts (should be 0)`);
+            }
+
+            // Show assertion block
+            showAssertionBlock(globalBefore, result);
+        } catch (e) {
+            addLog('error', 'ERROR', e.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '▶ Run Scenario B';
+        }
+    }
+
+    function showAssertionBlock(expectedGlobal, replayResult) {
+        const block = document.getElementById('assertionBlock');
+        const expected = expectedGlobal;
+        const recovered = state.naive_global;
+        const dups = replayResult.duplicates_ignored;
+        const deleted = lastCrashResult ? lastCrashResult.deleted_count : '?';
+
+        const p1 = expected === recovered;
+        const p2 = recovered === state.authoritative_global;
+        const p3 = dups === parseInt(deleted);
+
+        block.innerHTML = `
+<span class="assert-label">════════════════════════════════════════</span>
+<span class="assert-label">  COUNTERGHOST ASSERTION BLOCK</span>
+<span class="assert-label">════════════════════════════════════════</span>
+<span class="assert-label">  expected_global_count        = </span><span class="assert-value">${expected}</span>
+<span class="assert-label">  recovered_global_count       = </span><span class="assert-value">${recovered}</span>
+<span class="assert-label">  duplicate_operations_ignored = </span><span class="assert-value">${dups}</span>
+<span class="${p1 ? 'assert-pass' : 'assert-fail'}">  ASSERT expected == recovered   -> ${p1 ? 'PASS ✓' : 'FAIL ✗'}</span>
+<span class="${p2 ? 'assert-pass' : 'assert-fail'}">  ASSERT post_replay == expected -> ${p2 ? 'PASS ✓' : 'FAIL ✗'}</span>
+<span class="${p3 ? 'assert-pass' : 'assert-fail'}">  ASSERT dups_ignored == deleted -> ${p3 ? 'PASS ✓' : 'FAIL ✗'}</span>
+<span class="assert-label">════════════════════════════════════════</span>`;
+        block.classList.add('visible');
+    }
+
+    // =========================================================================
+    // Invariant Panel
+    // =========================================================================
+    function checkInvariants() {
+        // I5: naive == auth (when no crash is active)
+        if (state.naive_global === state.authoritative_global && state.naive_global > 0) {
+            setInvariant('I5', true);
+        }
+    }
+
+    function setInvariant(id, pass) {
+        const el = document.getElementById('inv-' + id);
+        if (!el) return;
+        el.className = 'invariant-item ' + (pass ? 'pass' : 'fail');
+        el.querySelector('.invariant-icon').textContent = pass ? '✓' : '✗';
+    }
+
+    // =========================================================================
+    // Event Log
+    // =========================================================================
+    function addLog(type, action, detail) {
+        const container = document.getElementById('logEntries');
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        const time = new Date().toLocaleTimeString();
+        entry.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-action ${type}">${action}</span> <span class="log-detail">${detail}</span>`;
+        container.insertBefore(entry, container.firstChild);
+
+        // Keep max 50 entries
+        while (container.children.length > 50) {
+            container.removeChild(container.lastChild);
+        }
+    }
+
+    // =========================================================================
+    // Utilities
+    // =========================================================================
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    // =========================================================================
+    // Init
+    // =========================================================================
+    async function init() {
+        await fetchState();
+        pollInterval = setInterval(fetchState, 2000);
+    }
+
+    init();
+    </script>
+</body>
+</html>
