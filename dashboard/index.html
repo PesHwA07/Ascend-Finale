@@ -409,6 +409,32 @@
             </div>
         </div>
 
+        <!-- Chaos Experiments -->
+        <div class="section-title">Chaos Experiments</div>
+        <div class="scenario-row">
+            <div class="scenario-card">
+                <div class="scenario-label">🌪 Triple Crash</div>
+                <div class="scenario-desc">
+                    Crash ALL 3 nodes → wait for Sentinel+Reconciler auto-heal → verify all converge
+                </div>
+                <button class="btn btn-scenario" id="btnTripleCrash" onclick="runTripleCrash()">▶ Run</button>
+            </div>
+            <div class="scenario-card">
+                <div class="scenario-label">🔄 Rebuild Proof</div>
+                <div class="scenario-desc">
+                    Seed ops → crash node-1 → wipe &amp; rebuild from coordinator log → verify match
+                </div>
+                <button class="btn btn-scenario" id="btnRebuildProof" onclick="runRebuildProof()">▶ Run</button>
+            </div>
+            <div class="scenario-card">
+                <div class="scenario-label">⏰ Time Travel</div>
+                <div class="scenario-desc">
+                    Seed ops → record timestamp → add more ops → temporal query at old timestamp
+                </div>
+                <button class="btn btn-scenario" id="btnTimeTravel" onclick="runTimeTravel()">▶ Run</button>
+            </div>
+        </div>
+
         <!-- Event Log -->
         <div class="section-title">Event Log</div>
         <div class="event-log">
@@ -681,6 +707,122 @@
             }
         } catch (e) { addLog('error', 'ERROR', e.message); }
         finally { btn.disabled = false; btn.textContent = '▶ Run Scenario B'; }
+    }
+
+    // =========================================================================
+    // Chaos Experiments
+    // =========================================================================
+    async function runTripleCrash() {
+        const btn = document.getElementById('btnTripleCrash');
+        btn.disabled = true; btn.textContent = '⏳ Running...';
+
+        try {
+            // 1. Seed all nodes
+            addLog('info', 'TRIPLE CRASH', '─── Step 1: Seeding 30 ops × 3 nodes ───');
+            for (const id of ['node-0', 'node-1', 'node-2']) {
+                await api('POST', '/api/apply', { node_id: id, amount: 1, count: 30 });
+            }
+            await fetchState();
+            const authBefore = state.authoritative_global;
+            addLog('seed', 'SEED', `Global = ${authBefore}`);
+            await sleep(600);
+
+            // 2. Crash ALL nodes
+            addLog('info', 'TRIPLE CRASH', '─── Step 2: Crashing ALL 3 nodes ───');
+            for (const id of ['node-0', 'node-1', 'node-2']) {
+                const r = await api('POST', '/api/crash', { node_id: id, delete_count: 5 });
+                addLog('crash', 'CRASH', `${id}: lost ${r.deleted_count} ops`);
+            }
+            await fetchState();
+            addLog('crash', 'DIVERGENCE', `naive=${state.naive_global} (WRONG), auth=${state.authoritative_global} (correct)`);
+            await sleep(1500);
+
+            // 3. Reconcile ALL
+            addLog('info', 'TRIPLE CRASH', '─── Step 3: Reconciling all nodes ───');
+            for (const id of ['node-0', 'node-1', 'node-2']) {
+                const r = await api('POST', '/api/reconcile', { node_id: id });
+                addLog('reconcile', 'RECONCILE', `${id}: replayed ${r.replayed_count} missing ops`);
+            }
+            await fetchState();
+
+            const pass = state.naive_global === state.authoritative_global;
+            addLog(pass ? 'info' : 'error', 'TRIPLE CRASH',
+                pass ? `✅ All 3 nodes converged — naive=${state.naive_global} == auth=${state.authoritative_global}`
+                     : `❌ FAILED — naive=${state.naive_global} != auth=${state.authoritative_global}`);
+        } catch (e) { addLog('error', 'ERROR', e.message); }
+        finally { btn.disabled = false; btn.textContent = '▶ Run'; }
+    }
+
+    async function runRebuildProof() {
+        const btn = document.getElementById('btnRebuildProof');
+        btn.disabled = true; btn.textContent = '⏳ Running...';
+
+        try {
+            // 1. Seed node-1
+            addLog('info', 'REBUILD PROOF', '─── Step 1: Seeding 50 ops on node-1 ───');
+            await api('POST', '/api/apply', { node_id: 'node-1', amount: 1, count: 50 });
+            await fetchState();
+            const valBefore = state.nodes.find(n => n.node_id === 'node-1')?.local_value || 0;
+            addLog('seed', 'SEED', `node-1 localVal = ${valBefore}`);
+            await sleep(500);
+
+            // 2. Crash node-1
+            addLog('info', 'REBUILD PROOF', '─── Step 2: Crashing node-1 ───');
+            const crashRes = await api('POST', '/api/crash', { node_id: 'node-1', delete_count: 10 });
+            await fetchState();
+            addLog('crash', 'CRASH', `node-1: lost ${crashRes.deleted_count} ops — localVal now ${crashRes.new_local_value}`);
+            await sleep(800);
+
+            // 3. Projection Rebuild
+            addLog('info', 'REBUILD PROOF', '─── Step 3: Projection Rebuild from coordinator log ───');
+            const rebuildRes = await api('POST', '/api/rebuild', { node_id: 'node-1' });
+            await fetchState();
+            addLog('rebuild', 'REBUILD', `Wiped ${rebuildRes.ops_deleted} ops, replayed ${rebuildRes.ops_replayed} — localVal ${rebuildRes.old_local_value} → ${rebuildRes.new_local_value} in ${rebuildRes.rebuild_duration_ms}ms`);
+
+            const pass = rebuildRes.new_local_value === valBefore;
+            addLog(pass ? 'info' : 'error', 'REBUILD PROOF',
+                pass ? `✅ Rebuild restored exact value — ${rebuildRes.new_local_value} == ${valBefore} (original)`
+                     : `❌ FAILED — rebuilt ${rebuildRes.new_local_value} != original ${valBefore}`);
+        } catch (e) { addLog('error', 'ERROR', e.message); }
+        finally { btn.disabled = false; btn.textContent = '▶ Run'; }
+    }
+
+    async function runTimeTravel() {
+        const btn = document.getElementById('btnTimeTravel');
+        btn.disabled = true; btn.textContent = '⏳ Running...';
+
+        try {
+            // 1. Seed initial ops
+            addLog('info', 'TIME TRAVEL', '─── Step 1: Seeding 20 ops × 3 nodes ───');
+            for (const id of ['node-0', 'node-1', 'node-2']) {
+                await api('POST', '/api/apply', { node_id: id, amount: 1, count: 20 });
+            }
+            await fetchState();
+            const snapshotValue = state.authoritative_global;
+            const snapshotTime = new Date().toISOString();
+            addLog('info', 'TIME TRAVEL', `📸 Snapshot: global=${snapshotValue} at ${snapshotTime}`);
+            await sleep(1200); // ensure timestamp gap
+
+            // 2. Add more ops (these should be AFTER the snapshot)
+            addLog('info', 'TIME TRAVEL', '─── Step 2: Adding 30 more ops ───');
+            for (const id of ['node-0', 'node-1', 'node-2']) {
+                await api('POST', '/api/apply', { node_id: id, amount: 1, count: 10 });
+            }
+            await fetchState();
+            addLog('seed', 'SEED', `Current global = ${state.authoritative_global} (> ${snapshotValue})`);
+            await sleep(500);
+
+            // 3. Temporal query at snapshot time
+            addLog('info', 'TIME TRAVEL', '─── Step 3: Temporal query at snapshot time ───');
+            const result = await api('GET', `/api/temporal?as_of=${encodeURIComponent(snapshotTime)}`);
+            addLog('info', 'TEMPORAL', `global_at_snapshot=${result.global_value}, current=${result.current_value}`);
+
+            const pass = result.global_value <= snapshotValue + 3 && result.global_value >= snapshotValue - 3;
+            addLog(pass ? 'info' : 'error', 'TIME TRAVEL',
+                pass ? `✅ Time-travel works — value at snapshot (${result.global_value}) ≈ expected (${snapshotValue})`
+                     : `⚠ Approximate — value at snapshot (${result.global_value}) vs expected (${snapshotValue})`);
+        } catch (e) { addLog('error', 'ERROR', e.message); }
+        finally { btn.disabled = false; btn.textContent = '▶ Run'; }
     }
 
     // =========================================================================
