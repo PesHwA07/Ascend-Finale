@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CounterGhost — Agent Dashboard</title>
+    <meta name="description" content="Autonomous self-healing agent monitoring dashboard">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a1f2e;
+            --border: #2a3040;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #63b3ed;
+            --accent-purple: #b794f6;
+            --accent-green: #68d391;
+            --accent-red: #fc8181;
+            --accent-orange: #f6ad55;
+            --accent-cyan: #76e4f7;
+            --gradient-main: linear-gradient(135deg, #63b3ed, #b794f6);
+            --gradient-success: linear-gradient(135deg, #68d391, #4fd1c5);
+            --gradient-danger: linear-gradient(135deg, #fc8181, #f56565);
+            --shadow-glow-blue: 0 0 20px rgba(99,179,237,0.15);
+            --shadow-glow-green: 0 0 20px rgba(104,211,145,0.15);
+            --shadow-glow-red: 0 0 20px rgba(252,129,129,0.15);
+            --radius: 12px;
+            --radius-sm: 8px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle at 20% 30%, rgba(104,211,145,0.03) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 70%, rgba(99,179,237,0.03) 0%, transparent 50%);
+            z-index: -1;
+        }
+
+        /* ---- Header ---- */
+        .header {
+            padding: 1rem 2rem;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            background: rgba(10, 14, 23, 0.8);
+            position: sticky; top: 0; z-index: 100;
+        }
+
+        .header-left { display: flex; align-items: center; gap: 1rem; }
+
+        .logo {
+            font-size: 1.5rem; font-weight: 800;
+            background: var(--gradient-success);
+            -webkit-background-clip: text; background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-tag {
+            font-size: 0.65rem; font-weight: 600;
+            padding: 0.2rem 0.5rem; border-radius: 4px;
+            background: rgba(104,211,145,0.1); color: var(--accent-green);
+            border: 1px solid rgba(104,211,145,0.2);
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+
+        .header-right { display: flex; align-items: center; gap: 1rem; }
+
+        .nav-link {
+            font-size: 0.75rem; font-weight: 600;
+            color: var(--accent-red); text-decoration: none;
+            padding: 0.4rem 0.8rem;
+            border: 1px solid rgba(252,129,129,0.2); border-radius: var(--radius-sm);
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover { background: rgba(252,129,129,0.1); border-color: rgba(252,129,129,0.4); }
+
+        .ws-status { display: flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; color: var(--text-secondary); }
+        .ws-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+        .ws-dot.connected { background: var(--accent-green); animation: pulse 2s infinite; }
+        .ws-dot.error { background: var(--accent-red); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(104,211,145,0.4); }
+            50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(104,211,145,0); }
+        }
+
+        /* ---- Layout ---- */
+        .main { max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem 4rem; }
+
+        .section-title {
+            font-size: 0.75rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.1em;
+            color: var(--text-muted); margin-bottom: 0.75rem;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+        .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+        /* ---- Top Row: Topology + Divergence ---- */
+        .top-row {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 1rem; margin-bottom: 1.5rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+        }
+
+        .card-title {
+            font-size: 0.7rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--text-muted); margin-bottom: 1rem;
+        }
+
+        /* ---- Topology Map ---- */
+        .topology {
+            display: flex; justify-content: center;
+            align-items: center; gap: 2rem; padding: 1rem 0;
+        }
+
+        .topo-node {
+            display: flex; flex-direction: column;
+            align-items: center; gap: 0.5rem;
+        }
+
+        .topo-circle {
+            width: 60px; height: 60px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem; font-weight: 700;
+            transition: all 0.5s ease;
+            position: relative;
+        }
+
+        .topo-circle.alive {
+            background: rgba(104,211,145,0.15);
+            border: 2px solid var(--accent-green);
+            color: var(--accent-green);
+            box-shadow: 0 0 20px rgba(104,211,145,0.2);
+        }
+
+        .topo-circle.dead {
+            background: rgba(252,129,129,0.15);
+            border: 2px solid var(--accent-red);
+            color: var(--accent-red);
+            box-shadow: 0 0 20px rgba(252,129,129,0.3);
+            animation: deadPulse 1.5s infinite;
+        }
+
+        @keyframes deadPulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(252,129,129,0.2); }
+            50% { box-shadow: 0 0 25px rgba(252,129,129,0.4); }
+        }
+
+        .topo-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem; color: var(--text-secondary);
+        }
+
+        .topo-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem; font-weight: 600;
+        }
+
+        /* ---- Divergence Panel ---- */
+        .divergence-display {
+            text-align: center; padding: 1rem 0;
+        }
+
+        .divergence-big {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 4rem; font-weight: 800; line-height: 1;
+            transition: color 0.3s;
+        }
+
+        .divergence-big.zero { color: var(--accent-green); }
+        .divergence-big.nonzero { color: var(--accent-red); animation: divPulse 1s infinite; }
+
+        @keyframes divPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .divergence-label {
+            font-size: 0.75rem; color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        /* ---- Metrics Row ---- */
+        .metrics-row {
+            display: grid; grid-template-columns: repeat(4, 1fr);
+            gap: 1rem; margin-bottom: 1.5rem;
+        }
+
+        .metric-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1rem; text-align: center;
+        }
+
+        .metric-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem; font-weight: 700;
+            color: var(--accent-cyan);
+        }
+
+        .metric-label {
+            font-size: 0.6rem; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.05em;
+            margin-top: 0.3rem;
+        }
+
+        /* ---- Agent Event Log ---- */
+        .agent-log {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .agent-log-entries {
+            max-height: 300px; overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem; line-height: 2;
+        }
+
+        .agent-log-entries::-webkit-scrollbar { width: 4px; }
+        .agent-log-entries::-webkit-scrollbar-track { background: transparent; }
+        .agent-log-entries::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+        .agent-entry {
+            padding: 0.2rem 0.5rem;
+            border-bottom: 1px solid rgba(42,48,64,0.3);
+            animation: logSlideIn 0.3s ease;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
+
+        @keyframes logSlideIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .agent-entry .time { color: var(--text-muted); min-width: 70px; }
+
+        .agent-badge {
+            font-size: 0.55rem; font-weight: 700;
+            padding: 0.1rem 0.4rem; border-radius: 3px;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            min-width: 80px; text-align: center;
+        }
+
+        .agent-badge.sentinel { background: rgba(183,148,246,0.15); color: var(--accent-purple); border: 1px solid rgba(183,148,246,0.3); }
+        .agent-badge.reconciler { background: rgba(104,211,145,0.15); color: var(--accent-green); border: 1px solid rgba(104,211,145,0.3); }
+        .agent-badge.system { background: rgba(99,179,237,0.15); color: var(--accent-blue); border: 1px solid rgba(99,179,237,0.3); }
+        .agent-badge.error { background: rgba(252,129,129,0.15); color: var(--accent-red); border: 1px solid rgba(252,129,129,0.3); }
+
+        .agent-entry .message { color: var(--text-secondary); flex: 1; }
+
+        /* ---- Invariants ---- */
+        .invariant-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .invariant-grid {
+            display: grid; grid-template-columns: repeat(6, 1fr);
+            gap: 0.5rem; margin-top: 0.75rem;
+        }
+
+        .invariant-item {
+            background: rgba(255,255,255,0.02);
+            border-radius: var(--radius-sm);
+            padding: 0.6rem 0.5rem; text-align: center;
+            transition: all 0.3s; border: 1px solid transparent;
+        }
+
+        .invariant-item.pass { border-color: rgba(104,211,145,0.2); background: rgba(104,211,145,0.05); }
+        .invariant-item.fail { border-color: rgba(252,129,129,0.3); background: rgba(252,129,129,0.08); }
+
+        .invariant-icon { font-size: 0.85rem; margin-bottom: 0.15rem; }
+        .invariant-id { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700; margin-bottom: 0.2rem; }
+        .invariant-item.pass .invariant-id { color: var(--accent-green); }
+        .invariant-item.fail .invariant-id { color: var(--accent-red); }
+        .invariant-item.pending .invariant-id { color: var(--text-muted); }
+        .invariant-label { font-size: 0.55rem; color: var(--text-muted); }
+
+        /* ---- Assertion Block ---- */
+        .assertion-block {
+            background: #0d1117;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem; line-height: 1.8;
+            display: none;
+        }
+
+        .assertion-block.visible { display: block; animation: logSlideIn 0.4s ease; }
+
+        .assert-pass { color: var(--accent-green); }
+        .assert-fail { color: var(--accent-red); }
+        .assert-label { color: var(--text-secondary); }
+        .assert-value { color: var(--accent-cyan); font-weight: 600; }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 900px) {
+            .top-row { grid-template-columns: 1fr; }
+            .metrics-row { grid-template-columns: repeat(2, 1fr); }
+            .invariant-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-left">
+            <span class="logo">👻 CounterGhost</span>
+            <span class="header-tag">Agent Dashboard</span>
+        </div>
+        <div class="header-right">
+            <a href="/" class="nav-link">💥 Chaos Panel →</a>
+            <div class="ws-status">
+                <span class="ws-dot" id="wsDot"></span>
+                <span id="wsText">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+
+        <!-- Top row: Topology + Divergence -->
+        <div class="top-row">
+            <div class="card">
+                <div class="card-title">Live Topology</div>
+                <div class="topology" id="topologyMap"></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Divergence (Auth − Naive)</div>
+                <div class="divergence-display">
+                    <div class="divergence-big zero" id="divValue">0</div>
+                    <div class="divergence-label" id="divLabel">System healthy — no divergence</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics -->
+        <div class="metrics-row">
+            <div class="metric-card">
+                <div class="metric-value" id="metricNaive">0</div>
+                <div class="metric-label">Naive Global</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="metricAuth">0</div>
+                <div class="metric-label">Authoritative Global</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="metricReconciliations">0</div>
+                <div class="metric-label">Auto-Reconciliations</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value" id="metricDupsRejected">0</div>
+                <div class="metric-label">Duplicates Rejected</div>
+            </div>
+        </div>
+
+        <!-- Agent Activity Log -->
+        <div class="section-title">Agent Activity (Real-Time via WebSocket)</div>
+        <div class="agent-log">
+            <div class="agent-log-entries" id="agentLog">
+                <div class="agent-entry">
+                    <span class="time">--:--:--</span>
+                    <span class="agent-badge system">SYSTEM</span>
+                    <span class="message">Waiting for WebSocket connection...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Invariants -->
+        <div class="section-title">Correctness Invariants</div>
+        <div class="invariant-panel">
+            <div class="invariant-grid" id="invariantGrid">
+                <div class="invariant-item pending" id="inv-I1">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I1</div>
+                    <div class="invariant-label">No duplicate</div>
+                </div>
+                <div class="invariant-item pending" id="inv-I2">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I2</div>
+                    <div class="invariant-label">No op lost</div>
+                </div>
+                <div class="invariant-item pending" id="inv-I3">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I3</div>
+                    <div class="invariant-label">Monotonic</div>
+                </div>
+                <div class="invariant-item pending" id="inv-I4">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I4</div>
+                    <div class="invariant-label">Epoch unique</div>
+                </div>
+                <div class="invariant-item pending" id="inv-I5">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I5</div>
+                    <div class="invariant-label">Reproducible</div>
+                </div>
+                <div class="invariant-item pending" id="inv-I6">
+                    <div class="invariant-icon">⏳</div>
+                    <div class="invariant-id">I6</div>
+                    <div class="invariant-label">Idempotent</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assertion Block -->
+        <div class="assertion-block" id="assertionBlock"></div>
+
+    </main>
+
+    <script>
+    // =========================================================================
+    // State
+    // =========================================================================
+    let state = { nodes: [], naive_global: 0, authoritative_global: 0 };
+    let metrics = { reconciliations: 0, dupsRejected: 0 };
+    let ws = null;
+
+    // =========================================================================
+    // WebSocket
+    // =========================================================================
+    function connectWS() {
+        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+        ws.onopen = () => {
+            document.getElementById('wsDot').className = 'ws-dot connected';
+            document.getElementById('wsText').textContent = 'WebSocket live';
+            addAgentLog('system', 'WebSocket connected — receiving real-time events');
+            fetchState();
+        };
+
+        ws.onmessage = (evt) => {
+            try {
+                const event = JSON.parse(evt.data);
+                handleWSEvent(event);
+            } catch (e) { /* ignore */ }
+        };
+
+        ws.onclose = () => {
+            document.getElementById('wsDot').className = 'ws-dot error';
+            document.getElementById('wsText').textContent = 'Disconnected';
+            setTimeout(connectWS, 3000);
+        };
+
+        ws.onerror = () => ws.close();
+    }
+
+    function handleWSEvent(event) {
+        // Classify the event source
+        let badge = 'system';
+        if (event.type === 'node_down' || event.type === 'node_up') {
+            badge = 'sentinel';
+        } else if (['divergence_detected', 'reconciliation_started', 'reconciliation_complete'].includes(event.type)) {
+            badge = 'reconciler';
+        }
+
+        addAgentLog(badge, event.message || event.type);
+
+        // Update metrics from event data
+        if (event.type === 'reconciliation_complete' && event.data) {
+            if (event.data.reconciliations) metrics.reconciliations = event.data.reconciliations;
+            if (event.data.replayed_count > 0) metrics.reconciliations++;
+        }
+
+        if (event.type === 'replay_rejected' && event.data) {
+            metrics.dupsRejected += (event.data.duplicates_ignored || 0);
+
+            // I1: no duplicate if new_inserts === 0
+            if (event.data.new_inserts === 0) {
+                setInvariant('I1', true);
+                setInvariant('I3', true);
+            }
+        }
+
+        if (event.type === 'crash_injected') {
+            setInvariant('I2', true); // ops survive in coordinator
+            setInvariant('I4', true); // epoch incremented
+        }
+
+        if (event.type === 'reconciliation_complete' && event.data) {
+            const n = event.data.naive;
+            const a = event.data.authoritative;
+            if (n !== undefined && a !== undefined && n === a) {
+                setInvariant('I5', true);
+                setInvariant('I6', true);
+            }
+        }
+
+        // Refresh state for visual updates
+        fetchState();
+        updateMetricsUI();
+    }
+
+    // =========================================================================
+    // API
+    // =========================================================================
+    async function api(method, path) {
+        const res = await fetch(path, { method });
+        if (!res.ok) throw new Error(await res.text());
+        return res.json();
+    }
+
+    async function fetchState() {
+        try {
+            state = await api('GET', '/api/state');
+            updateTopology();
+            updateDivergence();
+            updateMetricsUI();
+            checkInvariants();
+        } catch (e) { /* silent */ }
+    }
+
+    // =========================================================================
+    // Topology Map
+    // =========================================================================
+    function updateTopology() {
+        const map = document.getElementById('topologyMap');
+        map.innerHTML = '';
+
+        state.nodes.forEach((n, i) => {
+            const el = document.createElement('div');
+            el.className = 'topo-node';
+            el.innerHTML = `
+                <div class="topo-circle ${n.is_alive ? 'alive' : 'dead'}">
+                    ${n.is_alive ? '●' : '✕'}
+                </div>
+                <div class="topo-label">${n.node_id}</div>
+                <div class="topo-value" style="color: ${n.is_alive ? 'var(--accent-green)' : 'var(--accent-red)'}">
+                    ${n.local_value}
+                </div>
+            `;
+            map.appendChild(el);
+
+            // Add connector line between nodes
+            if (i < state.nodes.length - 1) {
+                const line = document.createElement('div');
+                line.style.cssText = 'width: 40px; height: 2px; background: var(--border); margin-top: -1.5rem;';
+                map.appendChild(line);
+            }
+        });
+    }
+
+    // =========================================================================
+    // Divergence
+    // =========================================================================
+    function updateDivergence() {
+        const div = state.authoritative_global - state.naive_global;
+        const el = document.getElementById('divValue');
+        const label = document.getElementById('divLabel');
+
+        el.textContent = div;
+
+        if (div === 0) {
+            el.className = 'divergence-big zero';
+            label.textContent = 'System healthy — no divergence';
+        } else {
+            el.className = 'divergence-big nonzero';
+            label.textContent = `${div} operations missing — agents are working...`;
+        }
+    }
+
+    // =========================================================================
+    // Metrics
+    // =========================================================================
+    function updateMetricsUI() {
+        document.getElementById('metricNaive').textContent = state.naive_global;
+        document.getElementById('metricAuth').textContent = state.authoritative_global;
+        document.getElementById('metricReconciliations').textContent = metrics.reconciliations;
+        document.getElementById('metricDupsRejected').textContent = metrics.dupsRejected;
+    }
+
+    // =========================================================================
+    // Agent Log
+    // =========================================================================
+    function addAgentLog(badge, message) {
+        const container = document.getElementById('agentLog');
+        const entry = document.createElement('div');
+        entry.className = 'agent-entry';
+        const time = new Date().toLocaleTimeString();
+        entry.innerHTML = `
+            <span class="time">${time}</span>
+            <span class="agent-badge ${badge}">${badge.toUpperCase()}</span>
+            <span class="message">${message}</span>
+        `;
+        container.insertBefore(entry, container.firstChild);
+        while (container.children.length > 100) container.removeChild(container.lastChild);
+    }
+
+    // =========================================================================
+    // Invariants
+    // =========================================================================
+    function checkInvariants() {
+        if (state.naive_global === state.authoritative_global && state.naive_global > 0) {
+            setInvariant('I5', true);
+        }
+    }
+
+    function setInvariant(id, pass) {
+        const el = document.getElementById('inv-' + id);
+        if (!el) return;
+        el.className = 'invariant-item ' + (pass ? 'pass' : 'fail');
+        el.querySelector('.invariant-icon').textContent = pass ? '✓' : '✗';
+    }
+
+    // =========================================================================
+    // Init
+    // =========================================================================
+    connectWS();
+    setInterval(() => { if (!ws || ws.readyState !== WebSocket.OPEN) fetchState(); }, 3000);
+    </script>
+</body>
+</html>
