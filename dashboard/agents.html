@@ -129,80 +129,118 @@
             color: var(--text-muted); margin-bottom: 1rem;
         }
 
-        /* ---- Topology Map ---- */
-        .topology {
-            display: flex; justify-content: center;
-            align-items: center; gap: 2rem; padding: 1rem 0;
-        }
-
-        .topo-node {
+        /* ---- Architecture Flowchart ---- */
+        .arch-flow {
             display: flex; flex-direction: column;
-            align-items: center; gap: 0.5rem;
-        }
-
-        .topo-circle {
-            width: 60px; height: 60px;
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
+            align-items: center; gap: 0.4rem; padding: 0.5rem 0;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 0.7rem; font-weight: 700;
+        }
+
+        .arch-row {
+            display: flex; align-items: center; gap: 0.6rem;
+        }
+
+        .arch-node {
+            display: flex; flex-direction: column; align-items: center;
+            padding: 0.4rem 0.6rem;
+            border-radius: var(--radius-sm);
             transition: all 0.5s ease;
-            position: relative;
+            min-width: 80px;
         }
 
-        .topo-circle.alive {
-            background: rgba(104,211,145,0.15);
-            border: 2px solid var(--accent-green);
-            color: var(--accent-green);
-            box-shadow: 0 0 20px rgba(104,211,145,0.2);
+        .arch-node.alive {
+            background: rgba(104,211,145,0.08);
+            border: 1.5px solid rgba(104,211,145,0.4);
+            box-shadow: 0 0 12px rgba(104,211,145,0.1);
         }
 
-        .topo-circle.dead {
-            background: rgba(252,129,129,0.15);
-            border: 2px solid var(--accent-red);
-            color: var(--accent-red);
-            box-shadow: 0 0 20px rgba(252,129,129,0.3);
+        .arch-node.dead {
+            background: rgba(252,129,129,0.1);
+            border: 1.5px solid rgba(252,129,129,0.5);
+            box-shadow: 0 0 15px rgba(252,129,129,0.2);
             animation: deadPulse 1.5s infinite;
         }
 
         @keyframes deadPulse {
-            0%, 100% { box-shadow: 0 0 10px rgba(252,129,129,0.2); }
-            50% { box-shadow: 0 0 25px rgba(252,129,129,0.4); }
+            0%, 100% { box-shadow: 0 0 8px rgba(252,129,129,0.15); }
+            50% { box-shadow: 0 0 20px rgba(252,129,129,0.35); }
         }
 
-        .topo-label {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.65rem; color: var(--text-secondary);
+        .arch-node-id { font-size: 0.55rem; color: var(--text-secondary); }
+        .arch-node-val { font-size: 0.85rem; font-weight: 700; }
+        .arch-node.alive .arch-node-val { color: var(--accent-green); }
+        .arch-node.dead .arch-node-val { color: var(--accent-red); }
+        .arch-node-status { font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .arch-node.alive .arch-node-status { color: var(--accent-green); }
+        .arch-node.dead .arch-node-status { color: var(--accent-red); }
+
+        .arch-arrow {
+            color: var(--text-muted); font-size: 0.7rem;
+            display: flex; align-items: center; gap: 0.15rem;
         }
 
-        .topo-value {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.8rem; font-weight: 600;
+        .arch-arrow-down {
+            color: var(--text-muted); font-size: 0.65rem;
+            text-align: center; line-height: 1;
         }
+
+        .arch-center {
+            display: flex; flex-direction: column; align-items: center;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-sm);
+            background: rgba(99,179,237,0.08);
+            border: 1.5px solid rgba(99,179,237,0.3);
+            min-width: 140px;
+        }
+
+        .arch-center-label { font-size: 0.5rem; color: var(--accent-blue); text-transform: uppercase; letter-spacing: 0.06em; }
+        .arch-center-val { font-size: 1rem; font-weight: 800; color: var(--accent-cyan); }
+
+        .arch-agents {
+            display: flex; gap: 0.5rem; margin-top: 0.1rem;
+        }
+
+        .arch-agent-badge {
+            font-size: 0.45rem; font-weight: 700;
+            padding: 0.15rem 0.35rem; border-radius: 3px;
+            text-transform: uppercase; letter-spacing: 0.04em;
+        }
+
+        .arch-agent-badge.sentinel { background: rgba(183,148,246,0.15); color: var(--accent-purple); border: 1px solid rgba(183,148,246,0.3); }
+        .arch-agent-badge.reconciler { background: rgba(104,211,145,0.15); color: var(--accent-green); border: 1px solid rgba(104,211,145,0.3); }
 
         /* ---- Divergence Panel ---- */
         .divergence-display {
-            text-align: center; padding: 1rem 0;
+            text-align: center; padding: 0.5rem 0;
         }
 
         .divergence-big {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 4rem; font-weight: 800; line-height: 1;
-            transition: color 0.3s;
+            font-size: 3.5rem; font-weight: 800; line-height: 1;
+            transition: all 0.4s;
         }
 
         .divergence-big.zero { color: var(--accent-green); }
         .divergence-big.nonzero { color: var(--accent-red); animation: divPulse 1s infinite; }
 
         @keyframes divPulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.05); }
         }
 
         .divergence-label {
-            font-size: 0.75rem; color: var(--text-secondary);
-            margin-top: 0.5rem;
+            font-size: 0.7rem; color: var(--text-secondary);
+            margin-top: 0.4rem;
         }
+
+        .divergence-stats {
+            display: flex; justify-content: center; gap: 1.5rem;
+            margin-top: 0.6rem; font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem;
+        }
+
+        .div-stat-label { color: var(--text-muted); }
+        .div-stat-val { color: var(--accent-cyan); font-weight: 600; }
 
         /* ---- Metrics Row ---- */
         .metrics-row {
@@ -335,7 +373,7 @@
         }
 
         .chart-card canvas {
-            max-height: 220px;
+            max-height: 280px;
         }
 
         /* ---- Responsive ---- */
@@ -364,17 +402,21 @@
 
     <main class="main">
 
-        <!-- Top row: Topology + Divergence -->
+        <!-- Top row: Architecture Flowchart + Divergence -->
         <div class="top-row">
             <div class="card">
-                <div class="card-title">Live Topology</div>
-                <div class="topology" id="topologyMap"></div>
+                <div class="card-title">System Architecture (Live)</div>
+                <div class="arch-flow" id="archFlow"></div>
             </div>
             <div class="card">
                 <div class="card-title">Divergence (Auth − Naive)</div>
                 <div class="divergence-display">
                     <div class="divergence-big zero" id="divValue">0</div>
                     <div class="divergence-label" id="divLabel">System healthy — no divergence</div>
+                    <div class="divergence-stats">
+                        <span><span class="div-stat-label">Peak: </span><span class="div-stat-val" id="divPeak">0</span></span>
+                        <span><span class="div-stat-label">Changes: </span><span class="div-stat-val" id="divChanges">0</span></span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -567,51 +609,65 @@
     }
 
     // =========================================================================
-    // Topology Map
+    // Architecture Flowchart
     // =========================================================================
     function updateTopology() {
-        const map = document.getElementById('topologyMap');
-        map.innerHTML = '';
+        const container = document.getElementById('archFlow');
+        const authVal = state.authoritative_global;
 
-        state.nodes.forEach((n, i) => {
-            const el = document.createElement('div');
-            el.className = 'topo-node';
-            el.innerHTML = `
-                <div class="topo-circle ${n.is_alive ? 'alive' : 'dead'}">
-                    ${n.is_alive ? '●' : '✕'}
-                </div>
-                <div class="topo-label">${n.node_id}</div>
-                <div class="topo-value" style="color: ${n.is_alive ? 'var(--accent-green)' : 'var(--accent-red)'}">
-                    ${n.local_value}
-                </div>
-            `;
-            map.appendChild(el);
+        // Build node boxes
+        const nodeBoxes = state.nodes.map(n => `
+            <div class="arch-node ${n.is_alive ? 'alive' : 'dead'}">
+                <div class="arch-node-id">${n.node_id}</div>
+                <div class="arch-node-val">${n.local_value}</div>
+                <div class="arch-node-status">${n.is_alive ? '● online' : '✕ down'}</div>
+            </div>
+        `).join('<div class="arch-arrow">─</div>');
 
-            // Add connector line between nodes
-            if (i < state.nodes.length - 1) {
-                const line = document.createElement('div');
-                line.style.cssText = 'width: 40px; height: 2px; background: var(--border); margin-top: -1.5rem;';
-                map.appendChild(line);
-            }
-        });
+        container.innerHTML = `
+            <div class="arch-row">${nodeBoxes}</div>
+            <div class="arch-arrow-down">│<br>▼ dual-write</div>
+            <div class="arch-center">
+                <div class="arch-center-label">Coordinator DB</div>
+                <div class="arch-center-val">${authVal}</div>
+            </div>
+            <div class="arch-arrow-down">│<br>▼ monitors</div>
+            <div class="arch-agents">
+                <span class="arch-agent-badge sentinel">👁 Sentinel 5s</span>
+                <span class="arch-agent-badge reconciler">🔧 Reconciler 10s</span>
+            </div>
+        `;
     }
 
     // =========================================================================
     // Divergence
     // =========================================================================
+    let peakDivergence = 0;
+    let divergenceChanges = 0;
+    let lastDivergence = 0;
+
     function updateDivergence() {
         const div = state.authoritative_global - state.naive_global;
         const el = document.getElementById('divValue');
         const label = document.getElementById('divLabel');
 
+        // Track changes
+        if (div !== lastDivergence) {
+            divergenceChanges++;
+            lastDivergence = div;
+        }
+        if (Math.abs(div) > peakDivergence) peakDivergence = Math.abs(div);
+
         el.textContent = div;
+        document.getElementById('divPeak').textContent = peakDivergence;
+        document.getElementById('divChanges').textContent = divergenceChanges;
 
         if (div === 0) {
             el.className = 'divergence-big zero';
             label.textContent = 'System healthy — no divergence';
         } else {
             el.className = 'divergence-big nonzero';
-            label.textContent = `${div} operations missing — agents are working...`;
+            label.textContent = `${Math.abs(div)} operations missing — agents working...`;
         }
     }
 
@@ -672,31 +728,38 @@
                         label: 'Naive Global',
                         data: [],
                         borderColor: '#63b3ed',
-                        backgroundColor: 'rgba(99,179,237,0.1)',
-                        borderWidth: 2,
+                        backgroundColor: 'rgba(99,179,237,0.08)',
+                        borderWidth: 3,
                         tension: 0.3,
-                        fill: false,
-                        pointRadius: 0,
+                        fill: true,
+                        pointRadius: 2,
+                        pointBackgroundColor: '#63b3ed',
+                        order: 2,
                     },
                     {
                         label: 'Authoritative Global',
                         data: [],
-                        borderColor: '#68d391',
-                        backgroundColor: 'rgba(104,211,145,0.1)',
-                        borderWidth: 2,
+                        borderColor: '#48bb78',
+                        backgroundColor: 'transparent',
+                        borderWidth: 3,
+                        borderDash: [8, 4],
                         tension: 0.3,
                         fill: false,
-                        pointRadius: 0,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#48bb78',
+                        pointStyle: 'rectRot',
+                        order: 1,
                     },
                     {
                         label: 'Divergence',
                         data: [],
                         borderColor: '#fc8181',
-                        backgroundColor: 'rgba(252,129,129,0.15)',
+                        backgroundColor: 'rgba(252,129,129,0.25)',
                         borderWidth: 2,
                         tension: 0.3,
                         fill: true,
                         pointRadius: 0,
+                        order: 3,
                     }
                 ]
             },
