@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/PesHwA07/Ascend-Finale/internal/events"
 	"github.com/PesHwA07/Ascend-Finale/internal/model"
@@ -371,6 +372,54 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *e
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(ops)
+	})
+
+	// GET /api/temporal?as_of=RFC3339 — time-travel: what was the counter at time T?
+	mux.HandleFunc("/api/temporal", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		asOfStr := r.URL.Query().Get("as_of")
+		if asOfStr == "" {
+			http.Error(w, "as_of query parameter required (RFC3339 format or relative like '-30s')", http.StatusBadRequest)
+			return
+		}
+
+		// Try RFC3339 first, then relative duration
+		var asOf time.Time
+		var err error
+		asOf, err = time.Parse(time.RFC3339, asOfStr)
+		if err != nil {
+			// Try parsing as relative duration (e.g., "-30s", "-5m")
+			d, dErr := time.ParseDuration(asOfStr)
+			if dErr != nil {
+				http.Error(w, "invalid as_of: use RFC3339 (e.g., 2024-01-01T00:00:00Z) or relative (e.g., -30s)", http.StatusBadRequest)
+				return
+			}
+			asOf = time.Now().Add(d)
+		}
+
+		result, err := sim.TemporalQuery(asOf)
+		if err != nil {
+			log.Printf("ERROR: temporal query: %v", err)
+			http.Error(w, fmt.Sprintf("temporal query failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		bus.Publish(events.Event{
+			Type:    events.EventTemporalQuery,
+			Message: fmt.Sprintf("TEMPORAL: query as_of=%s → global=%d (current=%d)", asOf.Format(time.RFC3339), result.GlobalValue, result.CurrentValue),
+			Data: map[string]interface{}{
+				"as_of":        asOf.Format(time.RFC3339),
+				"global_value": result.GlobalValue,
+				"current":      result.CurrentValue,
+			},
+		})
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
 	})
 
 	log.Printf("HTTP server listening on %s", addr)

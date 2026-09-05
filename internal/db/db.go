@@ -254,6 +254,33 @@ func SumAmounts(d *sql.DB) (int64, error) {
 	return sum, nil
 }
 
+// SumAmountsAsOf returns the total sum of amounts where created_at <= asOf.
+// This enables temporal queries: "what was the counter at time T?"
+func SumAmountsAsOf(d *sql.DB, asOf time.Time) (int64, error) {
+	var sum int64
+	err := d.QueryRow(
+		`SELECT COALESCE(SUM(amount), 0) FROM operations WHERE created_at <= ?`,
+		asOf,
+	).Scan(&sum)
+	if err != nil {
+		return 0, fmt.Errorf("sum amounts as-of: %w", err)
+	}
+	return sum, nil
+}
+
+// SumAmountsAsOfByNode returns the per-node sum where created_at <= asOf.
+func SumAmountsAsOfByNode(d *sql.DB, nodeID string, asOf time.Time) (int64, error) {
+	var sum int64
+	err := d.QueryRow(
+		`SELECT COALESCE(SUM(amount), 0) FROM operations WHERE node_id = ? AND created_at <= ?`,
+		nodeID, asOf,
+	).Scan(&sum)
+	if err != nil {
+		return 0, fmt.Errorf("sum amounts as-of by node: %w", err)
+	}
+	return sum, nil
+}
+
 // SumAmountsByNode returns the sum of amounts for a specific node.
 func SumAmountsByNode(d *sql.DB, nodeID string) (int64, error) {
 	var sum int64
