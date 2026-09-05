@@ -217,3 +217,20 @@ func (n *Node) GetState() model.NodeState {
 		IsAlive:    n.isAlive,
 	}
 }
+
+// IncrementEpoch bumps the node to a new epoch (new incarnation after crash).
+// Records the new epoch in durable storage and resets sequence numbering.
+func (n *Node) IncrementEpoch() error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	n.epoch++
+	n.nextSeq = 1 // reset sequence for the new epoch
+
+	if err := db.InsertEpoch(n.DB, n.ID, n.epoch); err != nil {
+		return fmt.Errorf("node %s: record epoch %d: %w", n.ID, n.epoch, err)
+	}
+
+	log.Printf("Node %s: new epoch %d", n.ID, n.epoch)
+	return nil
+}

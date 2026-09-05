@@ -136,6 +136,61 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation) error 
 		json.NewEncoder(w).Encode(resp)
 	})
 
+	// POST /api/crash — simulate partial state loss on a node
+	mux.HandleFunc("/api/crash", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			NodeID      string `json:"node_id"`
+			DeleteCount int    `json:"delete_count"` // 0 = auto (~40%)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+			return
+		}
+		if req.NodeID == "" {
+			http.Error(w, "node_id is required", http.StatusBadRequest)
+			return
+		}
+
+		result, err := sim.CrashNode(req.NodeID, req.DeleteCount)
+		if err != nil {
+			log.Printf("ERROR: crash %s: %v", req.NodeID, err)
+			http.Error(w, fmt.Sprintf("crash failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	})
+
+	// GET /api/manifest — compute and return a node's manifest (derived from op log)
+	mux.HandleFunc("/api/manifest", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		nodeID := r.URL.Query().Get("node_id")
+		if nodeID == "" {
+			http.Error(w, "node_id query param required", http.StatusBadRequest)
+			return
+		}
+
+		manifest, err := sim.BuildManifest(nodeID)
+		if err != nil {
+			log.Printf("ERROR: manifest %s: %v", nodeID, err)
+			http.Error(w, fmt.Sprintf("manifest failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(manifest)
+	})
+
 	log.Printf("HTTP server listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }
