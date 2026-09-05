@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"log"
 
+	"github.com/PesHwA07/Ascend-Finale/internal/agents"
 	"github.com/PesHwA07/Ascend-Finale/internal/config"
 	"github.com/PesHwA07/Ascend-Finale/internal/db"
 	"github.com/PesHwA07/Ascend-Finale/internal/events"
@@ -60,7 +62,16 @@ func main() {
 	bus := events.NewBus(200)
 	log.Println("Event bus initialized")
 
-	// 6. Start HTTP server (blocks)
+	// 6. Start autonomous agents as background goroutines
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sentinel := agents.NewSentinel(sim, bus, 0)  // 0 → default 2s interval
+	reconciler := agents.NewReconciler(sim, bus, 0) // 0 → default 5s interval
+	go sentinel.Start(ctx)
+	go reconciler.Start(ctx)
+
+	// 7. Start HTTP server (blocks)
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	log.Printf("CounterGhost dashboard: http://localhost:%d", cfg.Port)
 	if err := server.Start(addr, dashboardFS, sim, bus); err != nil {
