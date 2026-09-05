@@ -1,28 +1,48 @@
 // Package server provides the HTTP server that serves the embedded
-// dashboard and will later host WebSocket connections for live updates.
+// dashboard and hosts API endpoints for the simulation.
 // Uses go:embed to bake the HTML/JS/CSS directly into the binary —
 // no separate file serving, no build step, zero deployment risk.
 package server
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+
+	"github.com/PesHwA07/Ascend-Finale/internal/model"
+	"github.com/PesHwA07/Ascend-Finale/internal/simulation"
 )
 
-// dashboardFS embeds the entire dashboard/ directory from the project root.
-// The go:embed directive is relative to THIS file's location, but we
-// reference it from the package that imports this — see the note in Start().
-//
-// NOTE: go:embed cannot reference files outside the package directory.
-// We'll embed from main.go instead and pass the FS in. See Start() signature.
+// stateResponse is the JSON shape for GET /api/state.
+type stateResponse struct {
+	Nodes              []model.NodeState `json:"nodes"`
+	NaiveGlobal        int64             `json:"naive_global"`
+	AuthoritativeGlobal int64            `json:"authoritative_global"`
+}
 
-// Start launches the HTTP server on the given port.
+// applyRequest is the JSON body for POST /api/apply.
+type applyRequest struct {
+	NodeID string `json:"node_id"`
+	Amount int64  `json:"amount"`
+	Count  int    `json:"count"` // how many operations to apply
+}
+
+// applyResponse is the JSON shape for POST /api/apply.
+type applyResponse struct {
+	Applied             int               `json:"applied"`
+	NodeState           model.NodeState   `json:"node_state"`
+	NaiveGlobal         int64             `json:"naive_global"`
+	AuthoritativeGlobal int64             `json:"authoritative_global"`
+}
+
+// Start launches the HTTP server on the given address.
 // dashboardFS is the embedded filesystem containing dashboard assets,
 // passed in from main.go where the go:embed directive lives.
-func Start(port int, dashboardFS embed.FS) error {
+// sim is the simulation engine providing node access and aggregation.
+func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation) error {
 	// Serve the dashboard directory from the embedded FS.
 	// Sub into "dashboard" because the embed path includes the directory name.
 	sub, err := fs.Sub(dashboardFS, "dashboard")
@@ -41,7 +61,81 @@ func Start(port int, dashboardFS embed.FS) error {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	addr := fmt.Sprintf(":%d", port)
-	log.Printf("CounterGhost dashboard: http://localhost:%d", port)
+	// GET /api/state — returns all node states + both global aggregations
+	mux.HandleFunc("/api/state", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		authGlobal, err := sim.AuthoritativeGlobalValue()
+		if err != nil {
+			log.Printf("ERROR: authoritative global value: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+		resp := stateResponse{
+			Nodes:               sim.AllStates(),
+			NaiveGlobal:         sim.NaiveGlobalValue(),
+			AuthoritativeGlobal: authGlobal,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	// POST /api/apply — apply N operations to a specific node
+	mux.HandleFunc("/api/apply", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req applyRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Validate
+		if req.NodeID == "" {
+			http.Error(w, "node_id is required", http.StatusBadRequest)
+			return
+		}
+		if req.Count <= 0 {
+			req.Count = 1 // default to 1 operation
+		}
+		if req.Amount == 0 {
+			req.Amount = 1 // default to +1 delta
+		}
+
+		n := sim.GetNode(req.NodeID)
+		if n == nil {
+			http.Error(w, fmt.Sprintf("node %q not found", req.NodeID), http.StatusNotFound)
+			return
+		}
+
+		ops, err := n.ApplyN(req.Count, req.Amount)
+		if err != nil {
+			log.Printf("ERROR: apply to %s: %v", req.NodeID, err)
+			http.Error(w, fmt.Sprintf("apply failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		authGlobal, _ := sim.AuthoritativeGlobalValue()
+
+		resp := applyResponse{
+			Applied:             len(ops),
+			NodeState:           n.GetState(),
+			NaiveGlobal:         sim.NaiveGlobalValue(),
+			AuthoritativeGlobal: authGlobal,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	})
+
+	log.Printf("HTTP server listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }

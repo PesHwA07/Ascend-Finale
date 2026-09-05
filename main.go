@@ -8,6 +8,7 @@ import (
 	"github.com/PesHwA07/Ascend-Finale/internal/config"
 	"github.com/PesHwA07/Ascend-Finale/internal/db"
 	"github.com/PesHwA07/Ascend-Finale/internal/server"
+	"github.com/PesHwA07/Ascend-Finale/internal/simulation"
 )
 
 // Embed the dashboard directory into the binary.
@@ -37,20 +38,27 @@ func main() {
 	defer coordDB.Close()
 	log.Println("Coordinator DB ready")
 
-	// 4. Open per-node databases
-	for i := 0; i < cfg.Nodes; i++ {
-		nodeID := fmt.Sprintf("node-%d", i)
-		nodeDB, err := db.OpenNodeDB(cfg.DBDir, nodeID)
-		if err != nil {
-			log.Fatalf("Failed to open DB for %s: %v", nodeID, err)
-		}
-		defer nodeDB.Close()
-		log.Printf("Node DB ready: %s", nodeID)
+	// 4. Initialize simulation — creates per-node DBs and node engines,
+	//    recovering any existing state from durable storage.
+	sim, err := simulation.NewSimulation(cfg, coordDB)
+	if err != nil {
+		log.Fatalf("Failed to initialize simulation: %v", err)
 	}
+	defer sim.Close()
+
+	// Log initial state
+	for _, s := range sim.AllStates() {
+		log.Printf("  %s: epoch=%d, localVal=%d, alive=%v",
+			s.NodeID, s.Epoch, s.LocalValue, s.IsAlive)
+	}
+	naive := sim.NaiveGlobalValue()
+	auth, _ := sim.AuthoritativeGlobalValue()
+	log.Printf("Global values — naive: %d, authoritative: %d", naive, auth)
 
 	// 5. Start HTTP server (blocks)
-	log.Println("Starting HTTP server...")
-	if err := server.Start(cfg.Port, dashboardFS); err != nil {
+	addr := fmt.Sprintf(":%d", cfg.Port)
+	log.Printf("CounterGhost dashboard: http://localhost:%d", cfg.Port)
+	if err := server.Start(addr, dashboardFS, sim); err != nil {
 		log.Fatalf("HTTP server error: %v", err)
 	}
 }
