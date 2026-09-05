@@ -2,7 +2,16 @@
 // Each simulated node gets its own SQLite file (avoids write contention
 // per PRD §12 risk mitigation), plus one coordinator DB that serves as
 // the authoritative operation log for reconciliation.
+//
+// Design decision: Manifests are derived, not stored.
+// A manifest (processed ranges, local value, highest contiguous sequence)
+// is a projection computed on-demand by scanning the operation log.
+// We deliberately do NOT store manifests in a separate table because:
+//   - It avoids drift between a stored manifest and the actual operations
+//   - The operation log is the single source of truth (event-sourcing pattern)
+//   - Recomputing is cheap at demo scale (hundreds of ops, not millions)
 package db
+
 
 import (
 	"database/sql"
