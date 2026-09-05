@@ -292,3 +292,70 @@ func StoreCrashedOps(nodeID string, ops []model.Operation) {
 func GetCrashedOps(nodeID string) []model.Operation {
 	return lastCrashedOps[nodeID]
 }
+
+// ReplayResult captures what happened during a delayed replay attempt.
+type ReplayResult struct {
+	NodeID            string `json:"node_id"`
+	AttemptedCount    int    `json:"attempted_count"`
+	DuplicatesIgnored int    `json:"duplicates_ignored"`
+	NewInserts        int    `json:"new_inserts"` // should be 0 if reconciled first
+	NaiveGlobal       int64  `json:"naive_global"`
+	AuthoritativeGlobal int64 `json:"authoritative_global"`
+}
+
+// ReplayDelayedOps simulates delayed network delivery of pre-crash operations.
+// This is Scenario B: after reconciliation has already fixed the node, the
+// "old" operations arrive late. The system must reject them via UUID dedup
+// (INSERT OR IGNORE) and prove the count doesn't change.
+func (s *Simulation) ReplayDelayedOps(nodeID string) (*ReplayResult, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	n := s.getNodeLocked(nodeID)
+	if n == nil {
+		return nil, fmt.Errorf("node %q not found", nodeID)
+	}
+
+	ops := GetCrashedOps(nodeID)
+	if len(ops) == 0 {
+		return nil, fmt.Errorf("no crashed ops stored for %q (crash first)", nodeID)
+	}
+
+	var dupsIgnored, newInserts int
+	for _, op := range ops {
+		// Try to insert into node DB — should be rejected (already reconciled)
+		inserted, err := db.InsertOperation(n.DB, op)
+		if err != nil {
+			log.Printf("WARNING: replay op %s to node %s: %v", op.OperationID, nodeID, err)
+			continue
+		}
+		if inserted {
+			newInserts++
+		} else {
+			dupsIgnored++
+		}
+
+		// Try coordinator too — should also be rejected
+		db.InsertOperation(s.CoordDB, op)
+	}
+
+	// Reload local value in case anything unexpected was inserted
+	if newInserts > 0 {
+		n.ReloadLocalVal()
+	}
+
+	naiveGlobal := s.naiveGlobalLocked()
+	authGlobal, _ := db.SumAmounts(s.CoordDB)
+
+	log.Printf("REPLAY %s: attempted %d ops, dups_ignored=%d, new_inserts=%d, naive=%d, auth=%d",
+		nodeID, len(ops), dupsIgnored, newInserts, naiveGlobal, authGlobal)
+
+	return &ReplayResult{
+		NodeID:              nodeID,
+		AttemptedCount:      len(ops),
+		DuplicatesIgnored:   dupsIgnored,
+		NewInserts:          newInserts,
+		NaiveGlobal:         naiveGlobal,
+		AuthoritativeGlobal: authGlobal,
+	}, nil
+}

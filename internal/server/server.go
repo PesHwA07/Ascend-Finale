@@ -221,6 +221,36 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation) error 
 		json.NewEncoder(w).Encode(result)
 	})
 
+	// POST /api/replay — simulate delayed re-delivery of pre-crash operations (Scenario B)
+	mux.HandleFunc("/api/replay", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			NodeID string `json:"node_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+			return
+		}
+		if req.NodeID == "" {
+			http.Error(w, "node_id is required", http.StatusBadRequest)
+			return
+		}
+
+		result, err := sim.ReplayDelayedOps(req.NodeID)
+		if err != nil {
+			log.Printf("ERROR: replay %s: %v", req.NodeID, err)
+			http.Error(w, fmt.Sprintf("replay failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	})
+
 	log.Printf("HTTP server listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }
