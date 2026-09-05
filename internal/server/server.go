@@ -191,6 +191,36 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation) error 
 		json.NewEncoder(w).Encode(manifest)
 	})
 
+	// POST /api/reconcile — detect and repair partial state loss on a node
+	mux.HandleFunc("/api/reconcile", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			NodeID string `json:"node_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+			return
+		}
+		if req.NodeID == "" {
+			http.Error(w, "node_id is required", http.StatusBadRequest)
+			return
+		}
+
+		result, err := sim.Reconcile(req.NodeID)
+		if err != nil {
+			log.Printf("ERROR: reconcile %s: %v", req.NodeID, err)
+			http.Error(w, fmt.Sprintf("reconcile failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	})
+
 	log.Printf("HTTP server listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }
