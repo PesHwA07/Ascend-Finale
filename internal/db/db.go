@@ -232,6 +232,16 @@ func DeleteOperations(d *sql.DB, opIDs []string) (int64, error) {
 	return result.RowsAffected()
 }
 
+// DeleteAllOperations removes every operation from the given database.
+// Used by projection rebuild to wipe a node DB before replaying from coordinator.
+func DeleteAllOperations(d *sql.DB) (int64, error) {
+	result, err := d.Exec("DELETE FROM operations")
+	if err != nil {
+		return 0, fmt.Errorf("delete all operations: %w", err)
+	}
+	return result.RowsAffected()
+}
+
 // SumAmounts returns the total sum of all operation amounts in the database.
 // For a node DB, this gives the node's local counter value.
 // For the coordinator DB, this gives the authoritative global value.

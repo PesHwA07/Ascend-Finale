@@ -118,3 +118,9 @@ func (s *Simulation) Close() {
 	}
 	log.Println("Simulation shut down: all node DBs closed")
 }
+
+// GetCoordinatorOperations returns all operations from the coordinator DB.
+// Used by the audit trail API to show the complete authoritative log.
+func (s *Simulation) GetCoordinatorOperations() ([]model.Operation, error) {
+	return db.GetAllOperations(s.CoordDB)
+}

@@ -284,6 +284,9 @@
         .btn-replay { background: linear-gradient(135deg, rgba(246,173,85,0.15), rgba(246,173,85,0.05)); color: var(--accent-orange); border: 1px solid rgba(246,173,85,0.3); }
         .btn-replay:hover:not(:disabled) { background: linear-gradient(135deg, rgba(246,173,85,0.25), rgba(246,173,85,0.1)); }
 
+        .btn-rebuild { background: linear-gradient(135deg, rgba(183,148,246,0.15), rgba(183,148,246,0.05)); color: var(--accent-purple); border: 1px solid rgba(183,148,246,0.3); }
+        .btn-rebuild:hover:not(:disabled) { background: linear-gradient(135deg, rgba(183,148,246,0.25), rgba(183,148,246,0.1)); }
+
         .btn-scenario { background: var(--gradient-main); color: #fff; border: none; padding: 0.6rem 1rem; font-size: 0.75rem; }
         .btn-scenario:hover:not(:disabled) { opacity: 0.9; box-shadow: var(--shadow-glow-blue); }
 
@@ -333,6 +336,7 @@
         .log-action.crash { color: var(--accent-red); }
         .log-action.reconcile { color: var(--accent-green); }
         .log-action.replay { color: var(--accent-orange); }
+        .log-action.rebuild { color: var(--accent-purple); }
         .log-action.info { color: var(--accent-cyan); }
         .log-action.sentinel { color: var(--accent-purple); }
         .log-action.error { color: var(--accent-red); }
@@ -547,6 +551,7 @@
                     <button class="btn btn-crash" onclick="crashNode('${n.node_id}')">💥 Crash</button>
                     <button class="btn btn-reconcile" onclick="reconcileNode('${n.node_id}')">🔧 Reconcile</button>
                     <button class="btn btn-replay" onclick="replayNode('${n.node_id}')">📬 Replay</button>
+                    <button class="btn btn-rebuild" onclick="rebuildNode('${n.node_id}')" style="grid-column: span 2">🔄 Projection Rebuild</button>
                 </div>
             `;
             grid.appendChild(card);
@@ -609,6 +614,15 @@
         try {
             const result = await api('POST', '/api/replay', { node_id: nodeId });
             addLog('replay', 'REPLAY', `${nodeId}: attempted ${result.attempted_count}, dups_ignored=${result.duplicates_ignored}, new_inserts=${result.new_inserts}`);
+            await fetchState();
+        } catch (e) { addLog('error', 'ERROR', e.message); }
+    }
+
+    async function rebuildNode(nodeId) {
+        try {
+            addLog('rebuild', 'REBUILD', `${nodeId}: wiping local DB and replaying from coordinator...`);
+            const result = await api('POST', '/api/rebuild', { node_id: nodeId });
+            addLog('rebuild', 'REBUILD', `${nodeId}: wiped ${result.ops_deleted} ops, replayed ${result.ops_replayed} from coordinator in ${result.rebuild_duration_ms}ms — localVal ${result.old_local_value} → ${result.new_local_value}`);
             await fetchState();
         } catch (e) { addLog('error', 'ERROR', e.message); }
     }

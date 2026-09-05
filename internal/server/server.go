@@ -310,6 +310,69 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *e
 		json.NewEncoder(w).Encode(result)
 	})
 
+	// POST /api/rebuild — projection rebuild: wipe node DB, replay from coordinator
+	mux.HandleFunc("/api/rebuild", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req struct {
+			NodeID string `json:"node_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+			return
+		}
+		if req.NodeID == "" {
+			http.Error(w, "node_id is required", http.StatusBadRequest)
+			return
+		}
+
+		result, err := sim.RebuildFromLog(req.NodeID)
+		if err != nil {
+			log.Printf("ERROR: rebuild %s: %v", req.NodeID, err)
+			http.Error(w, fmt.Sprintf("rebuild failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		bus.Publish(events.Event{
+			Type:    events.EventProjectionRebuilt,
+			NodeID:  req.NodeID,
+			Message: fmt.Sprintf("REBUILD %s: wiped %d ops, replayed %d from coordinator in %dms — localVal %d → %d",
+				req.NodeID, result.OpsDeleted, result.OpsReplayed, result.RebuildDuration,
+				result.OldLocalValue, result.NewLocalValue),
+			Data: map[string]interface{}{
+				"ops_deleted":      result.OpsDeleted,
+				"ops_replayed":     result.OpsReplayed,
+				"old_local_value":  result.OldLocalValue,
+				"new_local_value":  result.NewLocalValue,
+				"rebuild_duration": result.RebuildDuration,
+			},
+		})
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(result)
+	})
+
+	// GET /api/operations — audit trail: list all coordinator operations
+	mux.HandleFunc("/api/operations", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		ops, err := sim.GetCoordinatorOperations()
+		if err != nil {
+			log.Printf("ERROR: get operations: %v", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(ops)
+	})
+
 	log.Printf("HTTP server listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }
