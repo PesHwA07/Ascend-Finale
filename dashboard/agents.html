@@ -6,6 +6,7 @@
     <title>CounterGhost — Agent Dashboard</title>
     <meta name="description" content="Autonomous self-healing agent monitoring dashboard">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --bg-primary: #0a0e17;
@@ -324,6 +325,19 @@
         .assert-label { color: var(--text-secondary); }
         .assert-value { color: var(--accent-cyan); font-weight: 600; }
 
+        /* ---- Chart ---- */
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .chart-card canvas {
+            max-height: 220px;
+        }
+
         /* ---- Responsive ---- */
         @media (max-width: 900px) {
             .top-row { grid-template-columns: 1fr; }
@@ -383,6 +397,12 @@
                 <div class="metric-value" id="metricDupsRejected">0</div>
                 <div class="metric-label">Duplicates Rejected</div>
             </div>
+        </div>
+
+        <!-- Divergence Chart -->
+        <div class="section-title">Counter Values Over Time</div>
+        <div class="chart-card">
+            <canvas id="divergenceChart"></canvas>
         </div>
 
         <!-- Agent Activity Log -->
@@ -446,6 +466,9 @@
     let state = { nodes: [], naive_global: 0, authoritative_global: 0 };
     let metrics = { reconciliations: 0, dupsRejected: 0 };
     let ws = null;
+    let divergenceChart = null;
+    const chartData = { labels: [], naive: [], auth: [], divergence: [] };
+    const MAX_CHART_POINTS = 60;
 
     // =========================================================================
     // WebSocket
@@ -538,6 +561,7 @@
             updateTopology();
             updateDivergence();
             updateMetricsUI();
+            updateChart();
             checkInvariants();
         } catch (e) { /* silent */ }
     }
@@ -635,8 +659,114 @@
     }
 
     // =========================================================================
+    // Chart
+    // =========================================================================
+    function initChart() {
+        const ctx = document.getElementById('divergenceChart').getContext('2d');
+        divergenceChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Naive Global',
+                        data: [],
+                        borderColor: '#63b3ed',
+                        backgroundColor: 'rgba(99,179,237,0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: false,
+                        pointRadius: 0,
+                    },
+                    {
+                        label: 'Authoritative Global',
+                        data: [],
+                        borderColor: '#68d391',
+                        backgroundColor: 'rgba(104,211,145,0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: false,
+                        pointRadius: 0,
+                    },
+                    {
+                        label: 'Divergence',
+                        data: [],
+                        borderColor: '#fc8181',
+                        backgroundColor: 'rgba(252,129,129,0.15)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: 0,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 300 },
+                interaction: { intersect: false, mode: 'index' },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#94a3b8',
+                            font: { family: 'Inter', size: 11 },
+                            usePointStyle: true,
+                            pointStyle: 'line',
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#1a1f2e',
+                        titleColor: '#e2e8f0',
+                        bodyColor: '#94a3b8',
+                        borderColor: '#2a3040',
+                        borderWidth: 1,
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 9 }, maxTicksLimit: 8 },
+                        grid: { color: 'rgba(42,48,64,0.3)' },
+                    },
+                    y: {
+                        ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } },
+                        grid: { color: 'rgba(42,48,64,0.3)' },
+                        beginAtZero: true,
+                    }
+                }
+            }
+        });
+    }
+
+    function updateChart() {
+        const now = new Date().toLocaleTimeString();
+        const div = state.authoritative_global - state.naive_global;
+
+        chartData.labels.push(now);
+        chartData.naive.push(state.naive_global);
+        chartData.auth.push(state.authoritative_global);
+        chartData.divergence.push(div);
+
+        // Keep rolling window
+        if (chartData.labels.length > MAX_CHART_POINTS) {
+            chartData.labels.shift();
+            chartData.naive.shift();
+            chartData.auth.shift();
+            chartData.divergence.shift();
+        }
+
+        if (divergenceChart) {
+            divergenceChart.data.labels = chartData.labels;
+            divergenceChart.data.datasets[0].data = chartData.naive;
+            divergenceChart.data.datasets[1].data = chartData.auth;
+            divergenceChart.data.datasets[2].data = chartData.divergence;
+            divergenceChart.update('none'); // no animation for smooth updates
+        }
+    }
+
+    // =========================================================================
     // Init
     // =========================================================================
+    initChart();
     connectWS();
     setInterval(() => { if (!ws || ws.readyState !== WebSocket.OPEN) fetchState(); }, 3000);
     </script>
