@@ -10,6 +10,13 @@
 --
 -- Applied automatically by docker-entrypoint-initdb.d
 
+DROP TABLE IF EXISTS node_manifests;
+DROP TABLE IF EXISTS dead_letter_queue;
+DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS operation_outbox;
+DROP TABLE IF EXISTS node_epochs;
+DROP TABLE IF EXISTS counter_operations;
+
 -- ════════════════════════════════════════════════════════════════
 -- Counter Operations (replaces per-node SQLite operations table)
 -- ════════════════════════════════════════════════════════════════

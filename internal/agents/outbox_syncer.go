@@ -26,6 +26,7 @@ type OutboxSyncer struct {
 	bus           *events.Bus
 	interval      time.Duration
 	kafkaProducer *kafkapkg.Producer // nil = direct DB write (SQLite mode)
+	usePostgres   bool               // True if coordinator is Postgres
 }
 
 // SetKafkaProducer configures the outbox syncer to publish to Kafka
@@ -33,6 +34,11 @@ type OutboxSyncer struct {
 func (o *OutboxSyncer) SetKafkaProducer(p *kafkapkg.Producer) {
 	o.kafkaProducer = p
 	log.Println("OutboxSyncer: Kafka producer attached — ops will flow through Kafka")
+}
+
+// SetUsePostgres configures the outbox syncer to use Postgres syntax for direct writes.
+func (o *OutboxSyncer) SetUsePostgres(use bool) {
+	o.usePostgres = use
 }
 
 // NewOutboxSyncer creates a new outbox syncer agent.
@@ -91,7 +97,11 @@ func (o *OutboxSyncer) syncAllNodes() {
 				syncErr = o.kafkaProducer.Publish(op)
 			} else {
 				// Demo mode: write directly to coordinator DB
-				_, syncErr = db.InsertOperation(coordDB, op)
+				if o.usePostgres {
+					_, syncErr = db.InsertOperationPG(coordDB, op)
+				} else {
+					_, syncErr = db.InsertOperation(coordDB, op)
+				}
 			}
 
 			if syncErr != nil {

@@ -64,6 +64,11 @@ func main() {
 		if err := db.InitDLQSchema(coordDB); err != nil {
 			log.Fatalf("Failed to init DLQ schema: %v", err)
 		}
+	} else if cfg.Reset {
+		if err := db.InitPostgresSchemas(coordDB, "."); err != nil {
+			log.Fatalf("Failed to apply Postgres schema: %v", err)
+		}
+		log.Println("Postgres schemas wiped and re-applied")
 	}
 	log.Println("Audit + DLQ schemas ready")
 
@@ -73,6 +78,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize simulation: %v", err)
 	}
+	sim.UsePostgres = usePostgres
 	defer sim.Close()
 
 	// Log initial state
@@ -92,9 +98,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sentinel := agents.NewSentinel(sim, bus, 0)        // 0 → default 5s interval
+	sentinel := agents.NewSentinel(sim, bus, 0)         // 0 → default 5s interval
 	reconciler := agents.NewReconciler(sim, bus, 0)     // 0 → default 10s interval
 	outboxSyncer := agents.NewOutboxSyncer(sim, bus, 0) // 0 → default 3s interval
+	outboxSyncer.SetUsePostgres(usePostgres)
 
 	// 6b. Wire Kafka producer to OutboxSyncer if configured
 	useKafka := cfg.KafkaBroker != ""

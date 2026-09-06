@@ -10,7 +10,9 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"path/filepath"
 	"time"
 
 	_ "github.com/lib/pq" // Postgres driver
@@ -71,6 +73,20 @@ CREATE TABLE IF NOT EXISTS dead_letter_queue (
 CREATE INDEX IF NOT EXISTS idx_dlq_node ON dead_letter_queue(node_id);
 CREATE INDEX IF NOT EXISTS idx_dlq_failed ON dead_letter_queue(failed_at);
 `
+
+// InitPostgresSchemas applies the migrations/001_initial.sql script to Postgres.
+// Used when the -reset flag is passed to ensure tables exist and are clean.
+func InitPostgresSchemas(db *sql.DB, projectRoot string) error {
+	schemaPath := filepath.Join(projectRoot, "migrations", "001_initial.sql")
+	bytes, err := ioutil.ReadFile(schemaPath)
+	if err != nil {
+		return fmt.Errorf("could not read migrations: %w", err)
+	}
+	
+	// Execute the entire schema script
+	_, err = db.Exec(string(bytes))
+	return err
+}
 
 // OpenPostgresCoordinator connects to Postgres and applies the schema.
 // connStr example: "postgres://counterghost:counterghost_dev@localhost:5432/counterghost?sslmode=disable"

@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CounterGhost — Chaos Panel</title>
-    <meta name="description" content="Distributed counter integrity — Chaos Control Panel">
+    <title>CounterGhost — E-Commerce Monitor</title>
+    <meta name="description" content="Distributed E-Commerce Order Monitor">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
             --bg-primary: #0a0e17;
@@ -13,1144 +14,683 @@
             --bg-card: #1a1f2e;
             --bg-card-hover: #1e2538;
             --border: #2a3040;
-            --border-glow: rgba(99, 179, 237, 0.15);
-            --text-primary: #e2e8f0;
+            --text-primary: #f8fafc;
             --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --accent-blue: #63b3ed;
-            --accent-purple: #b794f6;
-            --accent-green: #68d391;
-            --accent-red: #fc8181;
-            --accent-orange: #f6ad55;
-            --accent-cyan: #76e4f7;
-            --gradient-main: linear-gradient(135deg, #63b3ed, #b794f6);
-            --gradient-success: linear-gradient(135deg, #68d391, #4fd1c5);
-            --gradient-danger: linear-gradient(135deg, #fc8181, #f56565);
-            --gradient-warning: linear-gradient(135deg, #f6ad55, #ed8936);
-            --shadow-lg: 0 8px 32px rgba(0,0,0,0.4);
-            --shadow-glow-blue: 0 0 20px rgba(99,179,237,0.15);
-            --shadow-glow-green: 0 0 20px rgba(104,211,145,0.15);
-            --shadow-glow-red: 0 0 20px rgba(252,129,129,0.15);
+            --text-muted: #475569;
+            --accent-blue: #3b82f6;
+            --accent-indigo: #6366f1;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-orange: #f59e0b;
+            --gradient-main: linear-gradient(135deg, #3b82f6, #6366f1);
+            --gradient-success: linear-gradient(135deg, #10b981, #059669);
+            --gradient-danger: linear-gradient(135deg, #ef4444, #dc2626);
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
             --radius: 12px;
-            --radius-sm: 8px;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-family: 'Inter', system-ui, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
             min-height: 100vh;
-            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
-        body::before {
-            content: '';
-            position: fixed;
-            top: -50%; left: -50%;
-            width: 200%; height: 200%;
-            background: radial-gradient(circle at 30% 20%, rgba(99,179,237,0.03) 0%, transparent 50%),
-                        radial-gradient(circle at 70% 80%, rgba(183,148,246,0.03) 0%, transparent 50%);
-            z-index: -1;
-            animation: bgShift 20s ease-in-out infinite;
-        }
-
-        @keyframes bgShift {
-            0%, 100% { transform: translate(0, 0); }
-            50% { transform: translate(-3%, -3%); }
-        }
-
-        /* ---- Header ---- */
         .header {
             padding: 1rem 2rem;
             display: flex;
-            align-items: center;
             justify-content: space-between;
+            align-items: center;
+            background: var(--bg-secondary);
             border-bottom: 1px solid var(--border);
-            backdrop-filter: blur(12px);
-            background: rgba(10, 14, 23, 0.8);
             position: sticky;
             top: 0;
-            z-index: 100;
+            z-index: 50;
         }
-
-        .header-left { display: flex; align-items: center; gap: 1rem; }
 
         .logo {
             font-size: 1.5rem;
             font-weight: 800;
             background: var(--gradient-main);
             -webkit-background-clip: text;
-            background-clip: text;
             -webkit-text-fill-color: transparent;
-            letter-spacing: -0.02em;
-        }
-
-        .header-tag {
-            font-size: 0.65rem;
-            font-weight: 600;
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-            background: rgba(252, 129, 129, 0.1);
-            color: var(--accent-red);
-            border: 1px solid rgba(252, 129, 129, 0.2);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .header-right { display: flex; align-items: center; gap: 1rem; }
-
-        .nav-link {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--accent-cyan);
-            text-decoration: none;
-            padding: 0.4rem 0.8rem;
-            border: 1px solid rgba(118,228,247,0.2);
-            border-radius: var(--radius-sm);
-            transition: all 0.2s;
-        }
-
-        .nav-link:hover {
-            background: rgba(118,228,247,0.1);
-            border-color: rgba(118,228,247,0.4);
-        }
-
-        .ws-status {
             display: flex;
             align-items: center;
-            gap: 0.4rem;
-            font-size: 0.7rem;
-            color: var(--text-secondary);
+            gap: 0.5rem;
         }
 
-        .ws-dot {
-            width: 7px; height: 7px;
-            border-radius: 50%;
-            background: var(--text-muted);
+        .infra-status {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+            font-family: 'JetBrains Mono', monospace;
         }
 
-        .ws-dot.connected { background: var(--accent-green); animation: pulse 2s infinite; }
-        .ws-dot.error { background: var(--accent-red); }
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+        }
+        .status-dot.active { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+        .status-dot.inactive { background: var(--text-muted); }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(104,211,145,0.4); }
-            50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(104,211,145,0); }
+        .container {
+            padding: 2rem;
+            flex-grow: 1;
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 2rem;
+            max-width: 1600px;
+            margin: 0 auto;
+            width: 100%;
         }
 
-        /* ---- Layout ---- */
-        .main { max-width: 1400px; margin: 0 auto; padding: 1.5rem 2rem 4rem; }
-
-        .section-title {
-            font-size: 0.75rem; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 0.1em;
-            color: var(--text-muted); margin-bottom: 0.75rem;
-            display: flex; align-items: center; gap: 0.5rem;
+        @media (max-width: 1200px) {
+            .container { grid-template-columns: 1fr; }
         }
 
-        .section-title::after {
-            content: ''; flex: 1; height: 1px; background: var(--border);
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
         }
 
-        /* ---- Global Counters ---- */
-        .global-counters {
-            display: grid; grid-template-columns: 1fr 1fr 1fr;
-            gap: 1rem; margin-bottom: 1.5rem;
+        /* Metrics Row */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
         }
 
-        .counter-card {
+        .metric-card {
             background: var(--bg-card);
             border: 1px solid var(--border);
             border-radius: var(--radius);
-            padding: 1.25rem 1.5rem;
-            transition: all 0.3s ease;
-            position: relative; overflow: hidden;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
 
-        .counter-card::before {
-            content: ''; position: absolute;
-            top: 0; left: 0; right: 0; height: 2px;
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px -3px rgba(0,0,0,0.4);
         }
 
-        .counter-card.naive::before { background: var(--gradient-main); }
-        .counter-card.authoritative::before { background: var(--gradient-success); }
-        .counter-card.drift::before { background: var(--gradient-danger); }
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 4px;
+        }
+        .metric-card.reported::before { background: var(--accent-blue); }
+        .metric-card.verified::before { background: var(--accent-green); }
+        .metric-card.risk::before { background: var(--accent-orange); }
+        .metric-card.risk.danger::before { background: var(--accent-red); }
 
-        .counter-label {
-            font-size: 0.7rem; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 0.08em;
-            color: var(--text-muted); margin-bottom: 0.5rem;
+        .metric-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
         }
 
-        .counter-value {
+        .metric-value {
+            font-size: 2.5rem;
+            font-weight: 800;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 2.25rem; font-weight: 700; line-height: 1;
         }
+        
+        .metric-card.risk.danger .metric-value { color: var(--accent-red); }
 
-        .counter-card.naive .counter-value { color: var(--accent-blue); }
-        .counter-card.authoritative .counter-value { color: var(--accent-green); }
-        .counter-card.drift .counter-value { color: var(--accent-red); }
-        .counter-card.drift.zero .counter-value { color: var(--accent-green); }
-
-        .counter-subtitle {
-            font-size: 0.7rem; color: var(--text-muted); margin-top: 0.35rem;
-        }
-
-        /* ---- Nodes ---- */
-        .nodes-grid {
-            display: grid; grid-template-columns: repeat(3, 1fr);
-            gap: 1rem; margin-bottom: 1.5rem;
-        }
-
-        .node-card {
+        /* Chart */
+        .chart-container {
             background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            height: 300px;
+        }
+
+        /* Regions Grid */
+        .regions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .region-card {
+            background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: var(--radius);
             padding: 1.25rem;
             transition: all 0.3s ease;
         }
 
-        .node-card:hover {
-            border-color: rgba(99, 179, 237, 0.3);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-glow-blue);
-        }
-
-        .node-card.crashed {
-            border-color: rgba(252, 129, 129, 0.3);
-            box-shadow: var(--shadow-glow-red);
-        }
-
-        .node-header {
-            display: flex; align-items: center;
-            justify-content: space-between; margin-bottom: 0.75rem;
-        }
-
-        .node-id {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem; font-weight: 600; color: var(--accent-cyan);
-        }
-
-        .node-badge {
-            font-size: 0.6rem; font-weight: 600;
-            padding: 0.15rem 0.4rem; border-radius: 4px;
-            text-transform: uppercase; letter-spacing: 0.05em;
-        }
-
-        .node-badge.alive { background: rgba(104,211,145,0.1); color: var(--accent-green); border: 1px solid rgba(104,211,145,0.2); }
-        .node-badge.dead { background: rgba(252,129,129,0.1); color: var(--accent-red); border: 1px solid rgba(252,129,129,0.2); }
-
-        .node-stats {
-            display: grid; grid-template-columns: 1fr 1fr 1fr;
-            gap: 0.5rem; margin-bottom: 0.75rem;
-        }
-
-        .node-stat {
-            background: rgba(255,255,255,0.02);
-            padding: 0.4rem 0.5rem; border-radius: var(--radius-sm);
-        }
-
-        .node-stat-label { font-size: 0.55rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-        .node-stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1rem; font-weight: 600; color: var(--text-primary); }
-
-        .node-actions {
-            display: grid; grid-template-columns: 1fr 1fr;
-            gap: 0.4rem;
-        }
-
-        /* ---- Buttons ---- */
-        .btn {
-            display: inline-flex; align-items: center; justify-content: center;
-            gap: 0.3rem; width: 100%;
-            padding: 0.5rem 0.75rem; border: none; border-radius: var(--radius-sm);
-            font-family: 'Inter', sans-serif; font-size: 0.65rem; font-weight: 600;
-            cursor: pointer; transition: all 0.2s ease;
-            text-transform: uppercase; letter-spacing: 0.03em;
-        }
-
-        .btn:active { transform: scale(0.97); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        .btn-seed { background: linear-gradient(135deg, rgba(99,179,237,0.15), rgba(99,179,237,0.05)); color: var(--accent-blue); border: 1px solid rgba(99,179,237,0.3); }
-        .btn-seed:hover:not(:disabled) { background: linear-gradient(135deg, rgba(99,179,237,0.25), rgba(99,179,237,0.1)); }
-
-        .btn-crash { background: linear-gradient(135deg, rgba(252,129,129,0.15), rgba(252,129,129,0.05)); color: var(--accent-red); border: 1px solid rgba(252,129,129,0.3); }
-        .btn-crash:hover:not(:disabled) { background: linear-gradient(135deg, rgba(252,129,129,0.25), rgba(252,129,129,0.1)); }
-
-        .btn-reconcile { background: linear-gradient(135deg, rgba(104,211,145,0.15), rgba(104,211,145,0.05)); color: var(--accent-green); border: 1px solid rgba(104,211,145,0.3); }
-        .btn-reconcile:hover:not(:disabled) { background: linear-gradient(135deg, rgba(104,211,145,0.25), rgba(104,211,145,0.1)); }
-
-        .btn-replay { background: linear-gradient(135deg, rgba(246,173,85,0.15), rgba(246,173,85,0.05)); color: var(--accent-orange); border: 1px solid rgba(246,173,85,0.3); }
-        .btn-replay:hover:not(:disabled) { background: linear-gradient(135deg, rgba(246,173,85,0.25), rgba(246,173,85,0.1)); }
-
-        .btn-rebuild { background: linear-gradient(135deg, rgba(183,148,246,0.15), rgba(183,148,246,0.05)); color: var(--accent-purple); border: 1px solid rgba(183,148,246,0.3); }
-        .btn-rebuild:hover:not(:disabled) { background: linear-gradient(135deg, rgba(183,148,246,0.25), rgba(183,148,246,0.1)); }
-
-        .btn-scenario { background: var(--gradient-main); color: #fff; border: none; padding: 0.6rem 1rem; font-size: 0.75rem; }
-        .btn-scenario:hover:not(:disabled) { opacity: 0.9; box-shadow: var(--shadow-glow-blue); }
-
-        .btn-seed-all { background: var(--gradient-main); color: #fff; border: none; padding: 0.6rem 1rem; font-size: 0.75rem; grid-column: span 2; }
-
-        /* ---- Scenarios ---- */
-        .scenario-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
-
-        .scenario-card {
-            background: var(--bg-card); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 1.25rem;
-            display: flex; flex-direction: column; gap: 0.75rem;
-        }
-
-        .scenario-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
-        .scenario-card:first-child .scenario-label { color: var(--accent-blue); }
-        .scenario-card:last-child .scenario-label { color: var(--accent-orange); }
-
-        .scenario-desc { font-size: 0.7rem; color: var(--text-secondary); line-height: 1.5; }
-
-        /* ---- Event Log ---- */
-        .event-log {
-            background: var(--bg-card); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 1.25rem;
-        }
-
-        .log-entries {
-            max-height: 220px; overflow-y: auto;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.68rem; line-height: 1.8;
-        }
-
-        .log-entries::-webkit-scrollbar { width: 4px; }
-        .log-entries::-webkit-scrollbar-track { background: transparent; }
-        .log-entries::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-        .log-entry { padding: 0.1rem 0; border-bottom: 1px solid rgba(42,48,64,0.5); animation: logSlideIn 0.3s ease; }
-
-        @keyframes logSlideIn {
-            from { opacity: 0; transform: translateX(-8px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-
-        .log-time { color: var(--text-muted); }
-        .log-action { font-weight: 600; }
-        .log-action.seed { color: var(--accent-blue); }
-        .log-action.crash { color: var(--accent-red); }
-        .log-action.reconcile { color: var(--accent-green); }
-        .log-action.replay { color: var(--accent-orange); }
-        .log-action.rebuild { color: var(--accent-purple); }
-        .log-action.info { color: var(--accent-cyan); }
-        .log-action.sentinel { color: var(--accent-purple); }
-        .log-action.audit { color: var(--accent-cyan); }
-        .log-action.outbox { color: var(--accent-orange); }
-        .log-action.dlq { color: var(--accent-red); }
-        .log-action.error { color: var(--accent-red); }
-        .log-detail { color: var(--text-secondary); }
-
-        /* ---- Production Observability Panels ---- */
-        .observability-grid {
-            display: grid; grid-template-columns: 1fr 1fr 1fr;
-            gap: 1rem; margin-bottom: 1.5rem;
-        }
-
-        .obs-panel {
-            background: var(--bg-card); border: 1px solid var(--border);
-            border-radius: var(--radius); padding: 1.25rem;
-            position: relative; overflow: hidden;
-        }
-
-        .obs-panel::before {
-            content: ''; position: absolute;
-            top: 0; left: 0; right: 0; height: 2px;
-        }
-
-        .obs-panel.audit::before { background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue)); }
-        .obs-panel.outbox::before { background: linear-gradient(135deg, var(--accent-orange), #ed8936); }
-        .obs-panel.dlq::before { background: linear-gradient(135deg, var(--accent-red), #e53e3e); }
-
-        .obs-header {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 0.75rem;
-        }
-
-        .obs-title {
-            font-size: 0.7rem; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 0.08em;
-        }
-
-        .obs-panel.audit .obs-title { color: var(--accent-cyan); }
-        .obs-panel.outbox .obs-title { color: var(--accent-orange); }
-        .obs-panel.dlq .obs-title { color: var(--accent-red); }
-
-        .obs-badge {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.6rem; font-weight: 600;
-            padding: 0.15rem 0.5rem; border-radius: 4px;
-        }
-
-        .obs-badge.count-audit { background: rgba(118,228,247,0.1); color: var(--accent-cyan); border: 1px solid rgba(118,228,247,0.2); }
-        .obs-badge.count-outbox { background: rgba(246,173,85,0.1); color: var(--accent-orange); border: 1px solid rgba(246,173,85,0.2); }
-        .obs-badge.count-dlq { background: rgba(252,129,129,0.1); color: var(--accent-red); border: 1px solid rgba(252,129,129,0.2); }
-        .obs-badge.count-dlq.empty { background: rgba(104,211,145,0.1); color: var(--accent-green); border: 1px solid rgba(104,211,145,0.2); }
-
-        .obs-list {
-            max-height: 160px; overflow-y: auto;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.62rem; line-height: 1.7;
-        }
-
-        .obs-list::-webkit-scrollbar { width: 3px; }
-        .obs-list::-webkit-scrollbar-track { background: transparent; }
-        .obs-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-        .obs-row {
-            padding: 0.2rem 0; border-bottom: 1px solid rgba(42,48,64,0.4);
-            display: flex; gap: 0.5rem; align-items: baseline;
-        }
-
-        .obs-row-time { color: var(--text-muted); white-space: nowrap; }
-        .obs-row-action { font-weight: 600; white-space: nowrap; }
-        .obs-row-detail { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-        .obs-empty {
-            color: var(--text-muted); font-size: 0.65rem;
-            text-align: center; padding: 1.5rem 0;
-        }
-
-        .outbox-node-row {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 0.35rem 0.5rem; margin-bottom: 0.3rem;
-            background: rgba(255,255,255,0.02); border-radius: var(--radius-sm);
-        }
-
-        .outbox-node-id { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--accent-cyan); font-weight: 600; }
-        .outbox-node-stats { display: flex; gap: 0.75rem; font-size: 0.6rem; }
-        .outbox-stat { display: flex; align-items: center; gap: 0.25rem; }
-        .outbox-stat-label { color: var(--text-muted); }
-        .outbox-stat-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
-        .outbox-stat-value.pending { color: var(--accent-orange); }
-        .outbox-stat-value.synced { color: var(--accent-green); }
-        .outbox-stat-value.failed { color: var(--accent-red); }
-
-        /* ---- Infrastructure Status Bar ---- */
-        .infra-bar {
+        .region-header {
             display: flex;
-            justify-content: center;
-            gap: 2rem;
-            padding: 0.5rem 1.5rem;
-            background: rgba(30, 35, 50, 0.8);
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            font-size: 0.75rem;
-            font-family: 'JetBrains Mono', monospace;
-            color: var(--text-secondary);
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
         }
-        .infra-item {
+
+        .region-name {
+            font-weight: 700;
             display: flex;
             align-items: center;
-            gap: 0.4rem;
+            gap: 0.5rem;
         }
-        .infra-dot {
-            width: 8px; height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-        .infra-dot.active { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
-        .infra-dot.inactive { background: #555; }
 
-        /* ---- Responsive ---- */
-        @media (max-width: 768px) {
-            .global-counters, .nodes-grid, .scenario-row, .observability-grid { grid-template-columns: 1fr; }
-            .main { padding: 1rem; }
-            .infra-bar { flex-wrap: wrap; gap: 0.75rem; }
+        .region-status {
+            font-size: 0.75rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-weight: 600;
         }
+        .region-status.alive { background: rgba(16, 185, 129, 0.1); color: var(--accent-green); }
+        .region-status.crashed { background: rgba(239, 68, 68, 0.1); color: var(--accent-red); }
+
+        .region-orders {
+            font-size: 1.5rem;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 0.5rem;
+        }
+
+        .throughput-bar-bg {
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+        .throughput-bar-fill {
+            height: 100%;
+            background: var(--gradient-main);
+            width: 0%;
+            transition: width 0.5s ease;
+        }
+
+        .region-rate {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-align: right;
+        }
+
+        /* Sidebar: Controls & Events */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-title {
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Controls */
+        .control-group {
+            margin-bottom: 1.25rem;
+        }
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+        
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--border);
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px; width: 18px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: var(--accent-blue); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .range-slider {
+            width: 100%;
+            accent-color: var(--accent-blue);
+        }
+
+        /* Event Stream */
+        .event-stream {
+            flex-grow: 1;
+            overflow-y: auto;
+            height: 400px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.8rem;
+            padding-right: 0.5rem;
+        }
+
+        .event-stream::-webkit-scrollbar { width: 6px; }
+        .event-stream::-webkit-scrollbar-track { background: transparent; }
+        .event-stream::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        .log-entry {
+            padding: 0.5rem;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.02);
+            border-left: 2px solid transparent;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from{opacity:0; transform:translateX(10px)} to{opacity:1; transform:translateX(0)} }
+        
+        .log-entry .time { color: var(--text-muted); margin-right: 0.5rem; }
+        .log-entry.order { border-left-color: var(--accent-blue); }
+        .log-entry.crash { border-left-color: var(--accent-red); background: rgba(239, 68, 68, 0.05); }
+        .log-entry.heal { border-left-color: var(--accent-green); background: rgba(16, 185, 129, 0.05); }
+        .log-entry.warn { border-left-color: var(--accent-orange); }
+
     </style>
 </head>
 <body>
 
     <header class="header">
-        <div class="header-left">
-            <span class="logo">👻 CounterGhost</span>
-            <span class="header-tag">Chaos Panel</span>
+        <div class="logo">
+            📦 CounterGhost <span style="font-weight: 400; color: var(--text-secondary); font-size: 1rem; margin-left: 0.5rem;">E-Commerce Monitor</span>
         </div>
-        <div class="header-right">
-            <a href="/agents.html" class="nav-link">📊 Agent Dashboard →</a>
-            <div class="ws-status">
-                <span class="ws-dot" id="wsDot"></span>
-                <span id="wsText">Connecting...</span>
-            </div>
+        <div class="infra-status" id="infra-status">
+            <div class="status-badge"><div class="status-dot inactive" id="dot-coord"></div> Coordinator: <span id="lbl-coord">...</span></div>
+            <div class="status-badge"><div class="status-dot inactive" id="dot-kafka"></div> Event Bus: <span id="lbl-kafka">...</span></div>
         </div>
     </header>
 
-    <!-- Infrastructure Status Bar -->
-    <div class="infra-bar" id="infraBar">
-        <div class="infra-item" id="infraSqlite">
-            <span class="infra-dot active"></span>
-            <span>SQLite ✓ local</span>
-        </div>
-        <div class="infra-item" id="infraPostgres">
-            <span class="infra-dot inactive"></span>
-            <span>Postgres ✗ demo mode</span>
-        </div>
-        <div class="infra-item" id="infraKafka">
-            <span class="infra-dot inactive"></span>
-            <span>Kafka ✗ demo mode</span>
-        </div>
+    <div class="container">
+        <main class="main-content">
+            <!-- Global Metrics -->
+            <div class="metrics-grid">
+                <div class="metric-card reported">
+                    <div class="metric-label">Reported Orders (Naive)</div>
+                    <div class="metric-value" id="val-reported">0</div>
+                </div>
+                <div class="metric-card risk" id="card-risk">
+                    <div class="metric-label">Revenue at Risk (Drift)</div>
+                    <div class="metric-value" id="val-risk">0</div>
+                </div>
+                <div class="metric-card verified">
+                    <div class="metric-label">Verified Orders (Auth)</div>
+                    <div class="metric-value" id="val-verified">0</div>
+                </div>
+            </div>
+
+            <!-- Divergence Chart -->
+            <div class="chart-container">
+                <canvas id="driftChart"></canvas>
+            </div>
+
+            <!-- Regions -->
+            <div class="regions-grid">
+                <div class="region-card" id="region-node-0">
+                    <div class="region-header">
+                        <div class="region-name">🇺🇸 US-East</div>
+                        <div class="region-status alive" id="status-node-0">ALIVE</div>
+                    </div>
+                    <div class="region-orders" id="orders-node-0">0</div>
+                    <div class="throughput-bar-bg">
+                        <div class="throughput-bar-fill" id="bar-node-0"></div>
+                    </div>
+                    <div class="region-rate"><span id="rate-node-0">0</span> ord/sec</div>
+                </div>
+                
+                <div class="region-card" id="region-node-1">
+                    <div class="region-header">
+                        <div class="region-name">🇪🇺 EU-West</div>
+                        <div class="region-status alive" id="status-node-1">ALIVE</div>
+                    </div>
+                    <div class="region-orders" id="orders-node-1">0</div>
+                    <div class="throughput-bar-bg">
+                        <div class="throughput-bar-fill" id="bar-node-1"></div>
+                    </div>
+                    <div class="region-rate"><span id="rate-node-1">0</span> ord/sec</div>
+                </div>
+
+                <div class="region-card" id="region-node-2">
+                    <div class="region-header">
+                        <div class="region-name">🇯🇵 AP-South</div>
+                        <div class="region-status alive" id="status-node-2">ALIVE</div>
+                    </div>
+                    <div class="region-orders" id="orders-node-2">0</div>
+                    <div class="throughput-bar-bg">
+                        <div class="throughput-bar-fill" id="bar-node-2"></div>
+                    </div>
+                    <div class="region-rate"><span id="rate-node-2">0</span> ord/sec</div>
+                </div>
+            </div>
+        </main>
+
+        <aside class="sidebar">
+            <!-- Controls -->
+            <div class="panel">
+                <div class="panel-title">⚙️ System Controls</div>
+                
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>Auto-Stream Orders</span>
+                        <label class="switch">
+                            <input type="checkbox" id="toggle-stream" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>Order Speed (Interval)</span>
+                        <span id="speed-label">500ms</span>
+                    </div>
+                    <input type="range" class="range-slider" id="slider-speed" min="100" max="2000" step="100" value="500">
+                </div>
+
+                <div class="control-group" style="margin-bottom: 0;">
+                    <div class="control-label">
+                        <span>Regional Outages (Chaos)</span>
+                        <label class="switch">
+                            <input type="checkbox" id="toggle-chaos" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Event Stream -->
+            <div class="panel" style="flex-grow: 1;">
+                <div class="panel-title">📜 Live Event Stream</div>
+                <div class="event-stream" id="event-log">
+                    <!-- Logs will be prepended here -->
+                </div>
+            </div>
+        </aside>
     </div>
 
-    <main class="main">
-
-        <!-- Global Counters -->
-        <div class="global-counters">
-            <div class="counter-card naive">
-                <div class="counter-label">Naive Global (Sum of Locals)</div>
-                <div class="counter-value" id="naiveGlobal">0</div>
-                <div class="counter-subtitle">May be wrong after crash</div>
-            </div>
-            <div class="counter-card authoritative">
-                <div class="counter-label">Authoritative Global (Coordinator)</div>
-                <div class="counter-value" id="authGlobal">0</div>
-                <div class="counter-subtitle">Always correct — source of truth</div>
-            </div>
-            <div class="counter-card drift zero" id="driftCard">
-                <div class="counter-label">Drift (Auth − Naive)</div>
-                <div class="counter-value" id="driftValue">0</div>
-                <div class="counter-subtitle" id="driftLabel">No drift — system healthy</div>
-            </div>
-        </div>
-
-        <!-- Nodes with per-node controls -->
-        <div class="section-title">Node States & Controls</div>
-        <div class="nodes-grid" id="nodesGrid"></div>
-
-        <!-- Scenarios -->
-        <div class="section-title">Demo Scenarios</div>
-        <div class="scenario-row">
-            <div class="scenario-card">
-                <div class="scenario-label">Scenario A — Crash & Reconcile</div>
-                <div class="scenario-desc">
-                    Seed ops → Crash node-0 → Show wrong count → Reconcile → Show corrected count
-                </div>
-                <button class="btn btn-scenario" id="btnScenarioA" onclick="runScenarioA()">▶ Run Scenario A</button>
-            </div>
-            <div class="scenario-card">
-                <div class="scenario-label">Scenario B — Delayed Replay</div>
-                <div class="scenario-desc">
-                    After reconciliation, re-deliver crashed ops → Duplicates rejected → Count unchanged
-                </div>
-                <button class="btn btn-scenario" id="btnScenarioB" onclick="runScenarioB()">▶ Run Scenario B</button>
-            </div>
-        </div>
-
-        <!-- Chaos Experiments -->
-        <div class="section-title">Chaos Experiments</div>
-        <div class="scenario-row">
-            <div class="scenario-card">
-                <div class="scenario-label">🌪 Triple Crash</div>
-                <div class="scenario-desc">
-                    Crash ALL 3 nodes → wait for Sentinel+Reconciler auto-heal → verify all converge
-                </div>
-                <button class="btn btn-scenario" id="btnTripleCrash" onclick="runTripleCrash()">▶ Run</button>
-            </div>
-            <div class="scenario-card">
-                <div class="scenario-label">🔄 Rebuild Proof</div>
-                <div class="scenario-desc">
-                    Seed ops → crash node-1 → wipe &amp; rebuild from coordinator log → verify match
-                </div>
-                <button class="btn btn-scenario" id="btnRebuildProof" onclick="runRebuildProof()">▶ Run</button>
-            </div>
-            <div class="scenario-card">
-                <div class="scenario-label">⏰ Time Travel</div>
-                <div class="scenario-desc">
-                    Seed ops → record timestamp → add more ops → temporal query at old timestamp
-                </div>
-                <button class="btn btn-scenario" id="btnTimeTravel" onclick="runTimeTravel()">▶ Run</button>
-            </div>
-        </div>
-
-        <!-- Production Observability -->
-        <div class="section-title">Production Observability</div>
-        <div class="observability-grid">
-            <div class="obs-panel audit">
-                <div class="obs-header">
-                    <span class="obs-title">🔍 Audit Log</span>
-                    <span class="obs-badge count-audit" id="auditCount">0 entries</span>
-                </div>
-                <div class="obs-list" id="auditList">
-                    <div class="obs-empty">No audit entries yet</div>
-                </div>
-            </div>
-            <div class="obs-panel outbox">
-                <div class="obs-header">
-                    <span class="obs-title">📬 Outbox Status</span>
-                    <span class="obs-badge count-outbox" id="outboxCount">0 pending</span>
-                </div>
-                <div id="outboxList">
-                    <div class="obs-empty">No outbox data yet</div>
-                </div>
-            </div>
-            <div class="obs-panel dlq">
-                <div class="obs-header">
-                    <span class="obs-title">☠️ Dead Letter Queue</span>
-                    <span class="obs-badge count-dlq empty" id="dlqCount">0 — clean</span>
-                </div>
-                <div class="obs-list" id="dlqList">
-                    <div class="obs-empty">No poison pills — all operations healthy ✓</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Event Log -->
-        <div class="section-title">Event Log</div>
-        <div class="event-log">
-            <div class="log-entries" id="logEntries">
-                <div class="log-entry">
-                    <span class="log-time">[ready]</span>
-                    <span class="log-action info">INIT</span>
-                    <span class="log-detail">Chaos Panel loaded</span>
-                </div>
-            </div>
-        </div>
-
-    </main>
-
     <script>
-    // =========================================================================
-    // State
-    // =========================================================================
-    let state = { nodes: [], naive_global: 0, authoritative_global: 0 };
-    let scenarioADone = false;
-    let lastCrashResult = null;
-    let ws = null;
+        // Chart.js Setup
+        const ctx = document.getElementById('driftChart').getContext('2d');
+        const driftData = {
+            labels: Array(60).fill(''),
+            datasets: [{
+                label: 'Unverified Orders (Drift)',
+                data: Array(60).fill(0),
+                borderColor: '#f59e0b',
+                backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 0
+            }]
+        };
+        const driftChart = new Chart(ctx, {
+            type: 'line',
+            data: driftData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 0 },
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { display: false },
+                    y: { 
+                        beginAtZero: true,
+                        grid: { color: '#2a3040' },
+                        ticks: { color: '#94a3b8', stepSize: 5 }
+                    }
+                }
+            }
+        });
 
-    // =========================================================================
-    // WebSocket
-    // =========================================================================
-    function connectWS() {
-        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        ws = new WebSocket(`${protocol}//${location.host}/ws`);
-
-        ws.onopen = () => {
-            document.getElementById('wsDot').className = 'ws-dot connected';
-            document.getElementById('wsText').textContent = 'WebSocket connected';
-            fetchState(); // Initial load
+        const nodeNames = {
+            'node-0': 'US-East',
+            'node-1': 'EU-West',
+            'node-2': 'AP-South'
         };
 
-        ws.onmessage = (evt) => {
-            try {
-                const event = JSON.parse(evt.data);
-                handleWSEvent(event);
-            } catch (e) { /* ignore parse errors */ }
-        };
+        const rates = {'node-0': 0, 'node-1': 0, 'node-2': 0};
 
-        ws.onclose = () => {
-            document.getElementById('wsDot').className = 'ws-dot error';
-            document.getElementById('wsText').textContent = 'Disconnected — reconnecting...';
-            setTimeout(connectWS, 3000);
-        };
+        // Update Chart Data
+        function updateChart(drift) {
+            driftData.datasets[0].data.shift();
+            driftData.datasets[0].data.push(drift);
+            driftChart.update();
+        }
 
-        ws.onerror = () => ws.close();
-    }
+        // Add Log Entry
+        function addLog(type, msg) {
+            const log = document.getElementById('event-log');
+            const el = document.createElement('div');
+            el.className = `log-entry ${type}`;
+            const time = new Date().toLocaleTimeString([], {hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit'});
+            el.innerHTML = `<span class="time">${time}</span> ${msg}`;
+            log.prepend(el);
+            if (log.children.length > 100) {
+                log.removeChild(log.lastChild);
+            }
+        }
 
-    function handleWSEvent(event) {
-        const typeMap = {
-            'operation_applied': 'seed',
-            'crash_injected': 'crash',
-            'reconciliation_complete': 'reconcile',
-            'replay_rejected': 'replay',
-            'node_down': 'sentinel',
-            'node_up': 'sentinel',
-            'divergence_detected': 'reconcile',
-            'reconciliation_started': 'reconcile',
-            'outbox_synced': 'outbox',
-            'outbox_poison_pill': 'dlq',
-            'audit_logged': 'audit',
-        };
-        const logType = typeMap[event.type] || 'info';
-        const label = event.type.toUpperCase().replace(/_/g, ' ');
-        addLog(logType, label, event.message || '');
+        // WebSocket Connection
+        let ws;
+        function connectWS() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            
+            ws.onopen = () => addLog('heal', 'Connected to realtime stream');
+            ws.onclose = () => {
+                addLog('crash', 'Lost connection. Retrying...');
+                setTimeout(connectWS, 2000);
+            };
+            
+            ws.onmessage = (e) => {
+                const event = JSON.parse(e.data);
+                handleEvent(event);
+            };
+        }
 
-        // Refresh state on significant events
-        if (['crash_injected', 'reconciliation_complete', 'operation_applied', 'replay_rejected'].includes(event.type)) {
+        function handleEvent(e) {
+            if (e.type === 'operation_applied') {
+                const node = e.data.node_id;
+                rates[node]++;
+            } else if (e.type === 'node_down') {
+                const node = e.data.node_id;
+                const nodeName = nodeNames[node] || node;
+                addLog('crash', `⚠️ ${nodeName} OFFLINE (Lost ${e.data.deleted_count} orders)`);
+                document.getElementById(`status-${node}`).className = 'region-status crashed';
+                document.getElementById(`status-${node}`).innerText = 'CRASHED';
+            } else if (e.type === 'reconciliation_complete') {
+                const node = e.data.node_id;
+                const nodeName = nodeNames[node] || node;
+                if (e.data.replayed > 0) {
+                    addLog('heal', `🔧 ${nodeName} HEALED (Recovered ${e.data.replayed} orders)`);
+                }
+                document.getElementById(`status-${node}`).className = 'region-status alive';
+                document.getElementById(`status-${node}`).innerText = 'ALIVE';
+            } else if (e.type === 'divergence_detected') {
+                addLog('warn', `Revenue Risk detected: ${e.data.diff} unverified orders`);
+            }
+            
+            // Re-fetch state for updates
             fetchState();
         }
-        // Refresh observability panels on relevant events
-        if (['outbox_synced', 'outbox_poison_pill', 'audit_logged', 'crash_injected', 'reconciliation_complete', 'operation_applied'].includes(event.type)) {
-            fetchObservability();
-        }
-    }
 
-    // =========================================================================
-    // API
-    // =========================================================================
-    async function api(method, path, body) {
-        const opts = { method, headers: { 'Content-Type': 'application/json' } };
-        if (body) opts.body = JSON.stringify(body);
-        const res = await fetch(path, opts);
-        if (!res.ok) throw new Error(await res.text());
-        return res.json();
-    }
+        // Fetch Global State
+        async function fetchState() {
+            try {
+                const res = await fetch('/api/state');
+                const state = await res.json();
+                
+                const reported = state.naive_global;
+                const verified = state.authoritative_global;
+                const drift = reported - verified;
 
-    async function fetchState() {
-        try {
-            state = await api('GET', '/api/state');
-            updateUI();
-        } catch (e) { /* silent */ }
-    }
+                document.getElementById('val-reported').innerText = reported.toLocaleString();
+                document.getElementById('val-verified').innerText = verified.toLocaleString();
+                document.getElementById('val-risk').innerText = drift.toLocaleString();
+                
+                const riskCard = document.getElementById('card-risk');
+                if (drift > 0) {
+                    riskCard.classList.add('danger');
+                } else {
+                    riskCard.classList.remove('danger');
+                }
 
-    async function fetchObservability() {
-        try {
-            const [auditRes, dlqRes, outboxRes] = await Promise.all([
-                api('GET', '/api/audit?limit=20'),
-                api('GET', '/api/dlq?limit=20'),
-                api('GET', '/api/outbox'),
-            ]);
-            renderAuditPanel(auditRes);
-            renderDLQPanel(dlqRes);
-            renderOutboxPanel(outboxRes);
-        } catch (e) { /* silent */ }
-    }
+                updateChart(drift);
 
-    function renderAuditPanel(data) {
-        const list = document.getElementById('auditList');
-        const badge = document.getElementById('auditCount');
-        const entries = data.entries || [];
-        badge.textContent = `${data.count || 0} entries`;
-        if (entries.length === 0) {
-            list.innerHTML = '<div class="obs-empty">No audit entries yet</div>';
-            return;
-        }
-        list.innerHTML = entries.map(e => {
-            const t = new Date(e.timestamp).toLocaleTimeString();
-            const actionColor = e.action === 'crash' ? 'var(--accent-red)' : e.action === 'reconcile' ? 'var(--accent-green)' : 'var(--accent-cyan)';
-            return `<div class="obs-row"><span class="obs-row-time">[${t}]</span> <span class="obs-row-action" style="color:${actionColor}">${e.action}</span> <span class="obs-row-detail">${e.resource_id} — ${e.details || ''}</span></div>`;
-        }).join('');
-    }
-
-    function renderDLQPanel(data) {
-        const list = document.getElementById('dlqList');
-        const badge = document.getElementById('dlqCount');
-        const entries = data.entries || [];
-        const count = data.total_count || 0;
-        if (count === 0) {
-            badge.textContent = '0 — clean';
-            badge.className = 'obs-badge count-dlq empty';
-            list.innerHTML = '<div class="obs-empty">No poison pills — all operations healthy ✓</div>';
-            return;
-        }
-        badge.textContent = `${count} entries`;
-        badge.className = 'obs-badge count-dlq';
-        list.innerHTML = entries.map(e => {
-            const t = new Date(e.failed_at).toLocaleTimeString();
-            return `<div class="obs-row"><span class="obs-row-time">[${t}]</span> <span class="obs-row-action" style="color:var(--accent-red)">POISON</span> <span class="obs-row-detail">${e.node_id} — ${e.error_reason || 'unknown'}</span></div>`;
-        }).join('');
-    }
-
-    function renderOutboxPanel(data) {
-        const container = document.getElementById('outboxList');
-        const badge = document.getElementById('outboxCount');
-        const nodes = data.nodes || {};
-        const nodeIds = Object.keys(nodes).sort();
-        if (nodeIds.length === 0) {
-            badge.textContent = '0 pending';
-            container.innerHTML = '<div class="obs-empty">No outbox data yet</div>';
-            return;
-        }
-        let totalPending = 0;
-        let html = '';
-        for (const id of nodeIds) {
-            const s = nodes[id];
-            const pending = s.pending || 0;
-            const synced = s.synced || 0;
-            const failed = s.failed || 0;
-            totalPending += pending;
-            html += `<div class="outbox-node-row">
-                <span class="outbox-node-id">${id}</span>
-                <div class="outbox-node-stats">
-                    <span class="outbox-stat"><span class="outbox-stat-label">pending</span> <span class="outbox-stat-value pending">${pending}</span></span>
-                    <span class="outbox-stat"><span class="outbox-stat-label">synced</span> <span class="outbox-stat-value synced">${synced}</span></span>
-                    <span class="outbox-stat"><span class="outbox-stat-label">failed</span> <span class="outbox-stat-value failed">${failed}</span></span>
-                </div>
-            </div>`;
-        }
-        badge.textContent = `${totalPending} pending`;
-        container.innerHTML = html;
-    }
-
-    // =========================================================================
-    // UI Update
-    // =========================================================================
-    function updateUI() {
-        // Global counters
-        animateValue('naiveGlobal', state.naive_global);
-        animateValue('authGlobal', state.authoritative_global);
-
-        const drift = state.authoritative_global - state.naive_global;
-        animateValue('driftValue', drift);
-
-        const driftCard = document.getElementById('driftCard');
-        const driftLabel = document.getElementById('driftLabel');
-        if (drift === 0) {
-            driftCard.className = 'counter-card drift zero';
-            driftLabel.textContent = 'No drift — system healthy';
-        } else {
-            driftCard.className = 'counter-card drift nonzero';
-            driftLabel.textContent = `${drift} operations missing from nodes`;
+                state.nodes.forEach(n => {
+                    const el = document.getElementById(`orders-${n.node_id}`);
+                    if (el) el.innerText = n.local_value.toLocaleString();
+                    
+                    const statusEl = document.getElementById(`status-${n.node_id}`);
+                    if (statusEl) {
+                        if (n.is_alive) {
+                            statusEl.className = 'region-status alive';
+                            statusEl.innerText = 'ALIVE';
+                        } else {
+                            statusEl.className = 'region-status crashed';
+                            statusEl.innerText = 'CRASHED';
+                        }
+                    }
+                });
+            } catch (err) {}
         }
 
-        // Node cards with per-node controls
-        const grid = document.getElementById('nodesGrid');
-        grid.innerHTML = '';
-        state.nodes.forEach(n => {
-            const card = document.createElement('div');
-            card.className = 'node-card' + (n.is_alive ? '' : ' crashed');
-            card.innerHTML = `
-                <div class="node-header">
-                    <span class="node-id">${n.node_id}</span>
-                    <span class="node-badge ${n.is_alive ? 'alive' : 'dead'}">${n.is_alive ? '● ALIVE' : '✕ CRASHED'}</span>
-                </div>
-                <div class="node-stats">
-                    <div class="node-stat">
-                        <div class="node-stat-label">Local Value</div>
-                        <div class="node-stat-value">${n.local_value}</div>
-                    </div>
-                    <div class="node-stat">
-                        <div class="node-stat-label">Epoch</div>
-                        <div class="node-stat-value">${n.epoch}</div>
-                    </div>
-                    <div class="node-stat">
-                        <div class="node-stat-label">Next Seq</div>
-                        <div class="node-stat-value">${n.next_seq}</div>
-                    </div>
-                </div>
-                <div class="node-actions">
-                    <button class="btn btn-seed" onclick="seedNode('${n.node_id}')">📦 Seed 20</button>
-                    <button class="btn btn-crash" onclick="crashNode('${n.node_id}')">💥 Crash</button>
-                    <button class="btn btn-reconcile" onclick="reconcileNode('${n.node_id}')">🔧 Reconcile</button>
-                    <button class="btn btn-replay" onclick="replayNode('${n.node_id}')">📬 Replay</button>
-                    <button class="btn btn-rebuild" onclick="rebuildNode('${n.node_id}')" style="grid-column: span 2">🔄 Projection Rebuild</button>
-                </div>
-            `;
-            grid.appendChild(card);
+        // Fetch Infrastructure Status
+        async function fetchInfra() {
+            try {
+                const res = await fetch('/api/infrastructure');
+                const data = await res.json();
+                
+                const cDot = document.getElementById('dot-coord');
+                const cLbl = document.getElementById('lbl-coord');
+                if (data.coordinator === 'postgres') {
+                    cDot.className = 'status-dot active';
+                    cLbl.innerText = 'PostgreSQL';
+                } else {
+                    cDot.className = 'status-dot active';
+                    cDot.style.background = '#f6ad55';
+                    cDot.style.boxShadow = '0 0 8px #f6ad55';
+                    cLbl.innerText = 'SQLite (Local)';
+                }
+
+                const kDot = document.getElementById('dot-kafka');
+                const kLbl = document.getElementById('lbl-kafka');
+                if (data.kafka === 'connected') {
+                    kDot.className = 'status-dot active';
+                    kLbl.innerText = 'Kafka Active';
+                } else {
+                    kDot.className = 'status-dot inactive';
+                    kLbl.innerText = 'Disabled';
+                }
+            } catch (err) {}
+        }
+
+        // Controls Logic
+        async function fetchControlStatus() {
+            try {
+                const res = await fetch('/api/streaming/status');
+                const data = await res.json();
+                document.getElementById('toggle-stream').checked = data.streaming;
+                document.getElementById('toggle-chaos').checked = data.chaos;
+                document.getElementById('slider-speed').value = data.interval_ms;
+                document.getElementById('speed-label').innerText = data.interval_ms + 'ms';
+            } catch (err) {}
+        }
+
+        document.getElementById('toggle-stream').addEventListener('change', (e) => {
+            fetch('/api/streaming/toggle', {
+                method: 'POST',
+                body: JSON.stringify({ enabled: e.target.checked })
+            });
+            addLog('order', e.target.checked ? '▶ Auto-streaming Started' : '⏸ Auto-streaming Paused');
         });
-    }
 
-    function animateValue(elementId, newValue) {
-        const el = document.getElementById(elementId);
-        const current = parseInt(el.textContent) || 0;
-        if (current === newValue) return;
-        const duration = 400, start = performance.now();
-        function update(now) {
-            const progress = Math.min((now - start) / duration, 1);
-            const eased = 1 - Math.pow(1 - progress, 3);
-            el.textContent = Math.round(current + (newValue - current) * eased);
-            if (progress < 1) requestAnimationFrame(update);
-        }
-        requestAnimationFrame(update);
-    }
+        document.getElementById('toggle-chaos').addEventListener('change', (e) => {
+            fetch('/api/streaming/chaos', {
+                method: 'POST',
+                body: JSON.stringify({ enabled: e.target.checked })
+            });
+            addLog('warn', e.target.checked ? '🌪 Chaos Monkey Enabled' : '🛑 Chaos Monkey Disabled');
+        });
 
-    // =========================================================================
-    // Actions
-    // =========================================================================
-    async function seedNode(nodeId) {
-        try {
-            await api('POST', '/api/apply', { node_id: nodeId, amount: 1, count: 20 });
-            addLog('seed', 'SEED', `Applied 20 ops to ${nodeId}`);
-            await fetchState();
-        } catch (e) { addLog('error', 'ERROR', e.message); }
-    }
+        document.getElementById('slider-speed').addEventListener('input', (e) => {
+            document.getElementById('speed-label').innerText = e.target.value + 'ms';
+        });
 
-    async function seedAll() {
-        try {
-            for (const id of ['node-0', 'node-1', 'node-2']) {
-                await api('POST', '/api/apply', { node_id: id, amount: 1, count: 20 });
-            }
-            addLog('seed', 'SEED', 'Applied 20 ops × 3 nodes = 60 total');
-            await fetchState();
-        } catch (e) { addLog('error', 'ERROR', e.message); }
-    }
+        document.getElementById('slider-speed').addEventListener('change', (e) => {
+            fetch('/api/streaming/speed', {
+                method: 'POST',
+                body: JSON.stringify({ interval_ms: parseInt(e.target.value) })
+            });
+        });
 
-    async function crashNode(nodeId) {
-        try {
-            const result = await api('POST', '/api/crash', { node_id: nodeId, delete_count: 8 });
-            lastCrashResult = result;
-            addLog('crash', 'CRASH', `${nodeId}: deleted ${result.deleted_count} ops, localVal ${result.old_local_value} → ${result.new_local_value}`);
-            await fetchState();
-        } catch (e) { addLog('error', 'ERROR', e.message); }
-    }
+        // Calculate and display rates every second
+        setInterval(() => {
+            ['node-0', 'node-1', 'node-2'].forEach(id => {
+                const rate = rates[id];
+                document.getElementById(`rate-${id}`).innerText = rate;
+                // Update bar width (max 20 ops/sec for full width)
+                let pct = (rate / 20) * 100;
+                if (pct > 100) pct = 100;
+                document.getElementById(`bar-${id}`).style.width = `${pct}%`;
+                rates[id] = 0; // reset for next second
+            });
+        }, 1000);
 
-    async function reconcileNode(nodeId) {
-        try {
-            const result = await api('POST', '/api/reconcile', { node_id: nodeId });
-            addLog('reconcile', 'RECONCILE', `${nodeId}: found ${result.missing_count} missing, replayed ${result.replayed_count}`);
-            await fetchState();
-        } catch (e) { addLog('error', 'ERROR', e.message); }
-    }
-
-    async function replayNode(nodeId) {
-        try {
-            const result = await api('POST', '/api/replay', { node_id: nodeId });
-            addLog('replay', 'REPLAY', `${nodeId}: attempted ${result.attempted_count}, dups_ignored=${result.duplicates_ignored}, new_inserts=${result.new_inserts}`);
-            await fetchState();
-        } catch (e) { addLog('error', 'ERROR', e.message); }
-    }
-
-    async function rebuildNode(nodeId) {
-        try {
-            addLog('rebuild', 'REBUILD', `${nodeId}: wiping local DB and replaying from coordinator...`);
-            const result = await api('POST', '/api/rebuild', { node_id: nodeId });
-            addLog('rebuild', 'REBUILD', `${nodeId}: wiped ${result.ops_deleted} ops, replayed ${result.ops_replayed} from coordinator in ${result.rebuild_duration_ms}ms — localVal ${result.old_local_value} → ${result.new_local_value}`);
-            await fetchState();
-        } catch (e) { addLog('error', 'ERROR', e.message); }
-    }
-
-    // =========================================================================
-    // Scenarios
-    // =========================================================================
-    async function runScenarioA() {
-        const btn = document.getElementById('btnScenarioA');
-        btn.disabled = true; btn.textContent = '⏳ Running...';
-
-        try {
-            addLog('info', 'SCENARIO A', '─── Step 1: Seeding 40 ops × 3 nodes ───');
-            for (const id of ['node-0', 'node-1', 'node-2']) {
-                await api('POST', '/api/apply', { node_id: id, amount: 1, count: 40 });
-            }
-            await fetchState();
-            addLog('seed', 'SEED', `Global = ${state.authoritative_global}`);
-            await sleep(800);
-
-            addLog('info', 'SCENARIO A', '─── Step 2: Crashing node-0 ───');
-            const crashRes = await api('POST', '/api/crash', { node_id: 'node-0', delete_count: 8 });
-            lastCrashResult = crashRes;
-            await fetchState();
-            addLog('crash', 'CRASH', `node-0: lost ${crashRes.deleted_count} ops — naive=${state.naive_global} (WRONG), auth=${state.authoritative_global} (correct)`);
-            await sleep(1200);
-
-            addLog('info', 'SCENARIO A', '─── Step 3: Reconciling ───');
-            const reconRes = await api('POST', '/api/reconcile', { node_id: 'node-0' });
-            await fetchState();
-            addLog('reconcile', 'RECONCILE', `Found ${reconRes.missing_count} missing, replayed ${reconRes.replayed_count} — naive=${state.naive_global}, auth=${state.authoritative_global}`);
-
-            scenarioADone = true;
-            document.getElementById('btnScenarioB').disabled = false;
-            addLog('info', 'SCENARIO A', '✅ Complete — naive == authoritative');
-        } catch (e) { addLog('error', 'ERROR', e.message); }
-        finally { btn.disabled = false; btn.textContent = '▶ Run Scenario A'; }
-    }
-
-    async function runScenarioB() {
-        const btn = document.getElementById('btnScenarioB');
-        btn.disabled = true; btn.textContent = '⏳ Running...';
-
-        try {
-            // Step 1: Seed ops so there's data to crash
-            addLog('info', 'SCENARIO B', '─── Step 1: Seeding 40 ops on node-0 ───');
-            await api('POST', '/api/apply', { node_id: 'node-0', amount: 1, count: 40 });
-            await fetchState();
-            addLog('seed', 'SEED', `node-0 seeded — global = ${state.authoritative_global}`);
-            await sleep(600);
-
-            // Step 2: Crash node-0 (stores crashed ops in memory for replay)
-            addLog('info', 'SCENARIO B', '─── Step 2: Crashing node-0 (deletes 8 ops) ───');
-            const crashRes = await api('POST', '/api/crash', { node_id: 'node-0', delete_count: 8 });
-            await fetchState();
-            addLog('crash', 'CRASH', `node-0: lost ${crashRes.deleted_count} ops — naive=${state.naive_global} (WRONG), auth=${state.authoritative_global} (correct)`);
-            await sleep(800);
-
-            // Step 3: Reconcile — fix the missing ops
-            addLog('info', 'SCENARIO B', '─── Step 3: Reconciling node-0 (re-inserting missing ops) ───');
-            const reconRes = await api('POST', '/api/reconcile', { node_id: 'node-0' });
-            await fetchState();
-            addLog('reconcile', 'RECONCILE', `Found ${reconRes.missing_count} missing, replayed ${reconRes.replayed_count} — naive=${state.naive_global}, auth=${state.authoritative_global}`);
-            await sleep(800);
-
-            // Step 4: THE KEY TEST — Replay the crashed ops again
-            // These ops already exist (reconcile put them back). UUID dedup must reject ALL of them.
-            const globalBefore = state.naive_global;
-            addLog('info', 'SCENARIO B', '─── Step 4: Replaying crashed ops (should ALL be duplicates) ───');
-            const result = await api('POST', '/api/replay', { node_id: 'node-0' });
-            await fetchState();
-            addLog('replay', 'REPLAY', `Attempted ${result.attempted_count} ops — dups_ignored=${result.duplicates_ignored}, new_inserts=${result.new_inserts}`);
-
-            if (result.new_inserts === 0 && result.duplicates_ignored > 0) {
-                addLog('info', 'SCENARIO B', `✅ PASSED — all ${result.duplicates_ignored} duplicates rejected, global unchanged at ${state.naive_global}`);
-            } else if (result.new_inserts === 0) {
-                addLog('info', 'SCENARIO B', `✅ Complete — no new inserts, global unchanged at ${state.naive_global}`);
-            } else {
-                addLog('error', 'SCENARIO B', `❌ FAIL — ${result.new_inserts} new inserts (should be 0), global went from ${globalBefore} to ${state.naive_global}`);
-            }
-
-            scenarioADone = true;
-        } catch (e) { addLog('error', 'ERROR', e.message); }
-        finally { btn.disabled = false; btn.textContent = '▶ Run Scenario B'; }
-    }
-
-    // =========================================================================
-    // Chaos Experiments
-    // =========================================================================
-    async function runTripleCrash() {
-        const btn = document.getElementById('btnTripleCrash');
-        btn.disabled = true; btn.textContent = '⏳ Running...';
-
-        try {
-            // 1. Seed all nodes
-            addLog('info', 'TRIPLE CRASH', '─── Step 1: Seeding 30 ops × 3 nodes ───');
-            for (const id of ['node-0', 'node-1', 'node-2']) {
-                await api('POST', '/api/apply', { node_id: id, amount: 1, count: 30 });
-            }
-            await fetchState();
-            const authBefore = state.authoritative_global;
-            addLog('seed', 'SEED', `Global = ${authBefore}`);
-            await sleep(600);
-
-            // 2. Crash ALL nodes
-            addLog('info', 'TRIPLE CRASH', '─── Step 2: Crashing ALL 3 nodes ───');
-            for (const id of ['node-0', 'node-1', 'node-2']) {
-                const r = await api('POST', '/api/crash', { node_id: id, delete_count: 5 });
-                addLog('crash', 'CRASH', `${id}: lost ${r.deleted_count} ops`);
-            }
-            await fetchState();
-            addLog('crash', 'DIVERGENCE', `naive=${state.naive_global} (WRONG), auth=${state.authoritative_global} (correct)`);
-            await sleep(1500);
-
-            // 3. Reconcile ALL
-            addLog('info', 'TRIPLE CRASH', '─── Step 3: Reconciling all nodes ───');
-            for (const id of ['node-0', 'node-1', 'node-2']) {
-                const r = await api('POST', '/api/reconcile', { node_id: id });
-                addLog('reconcile', 'RECONCILE', `${id}: replayed ${r.replayed_count} missing ops`);
-            }
-            await fetchState();
-
-            const pass = state.naive_global === state.authoritative_global;
-            addLog(pass ? 'info' : 'error', 'TRIPLE CRASH',
-                pass ? `✅ All 3 nodes converged — naive=${state.naive_global} == auth=${state.authoritative_global}`
-                     : `❌ FAILED — naive=${state.naive_global} != auth=${state.authoritative_global}`);
-        } catch (e) { addLog('error', 'ERROR', e.message); }
-        finally { btn.disabled = false; btn.textContent = '▶ Run'; }
-    }
-
-    async function runRebuildProof() {
-        const btn = document.getElementById('btnRebuildProof');
-        btn.disabled = true; btn.textContent = '⏳ Running...';
-
-        try {
-            // 1. Seed node-1
-            addLog('info', 'REBUILD PROOF', '─── Step 1: Seeding 50 ops on node-1 ───');
-            await api('POST', '/api/apply', { node_id: 'node-1', amount: 1, count: 50 });
-            await fetchState();
-            const valBefore = state.nodes.find(n => n.node_id === 'node-1')?.local_value || 0;
-            addLog('seed', 'SEED', `node-1 localVal = ${valBefore}`);
-            await sleep(500);
-
-            // 2. Crash node-1
-            addLog('info', 'REBUILD PROOF', '─── Step 2: Crashing node-1 ───');
-            const crashRes = await api('POST', '/api/crash', { node_id: 'node-1', delete_count: 10 });
-            await fetchState();
-            addLog('crash', 'CRASH', `node-1: lost ${crashRes.deleted_count} ops — localVal now ${crashRes.new_local_value}`);
-            await sleep(800);
-
-            // 3. Projection Rebuild
-            addLog('info', 'REBUILD PROOF', '─── Step 3: Projection Rebuild from coordinator log ───');
-            const rebuildRes = await api('POST', '/api/rebuild', { node_id: 'node-1' });
-            await fetchState();
-            addLog('rebuild', 'REBUILD', `Wiped ${rebuildRes.ops_deleted} ops, replayed ${rebuildRes.ops_replayed} — localVal ${rebuildRes.old_local_value} → ${rebuildRes.new_local_value} in ${rebuildRes.rebuild_duration_ms}ms`);
-
-            const pass = rebuildRes.new_local_value === valBefore;
-            addLog(pass ? 'info' : 'error', 'REBUILD PROOF',
-                pass ? `✅ Rebuild restored exact value — ${rebuildRes.new_local_value} == ${valBefore} (original)`
-                     : `❌ FAILED — rebuilt ${rebuildRes.new_local_value} != original ${valBefore}`);
-        } catch (e) { addLog('error', 'ERROR', e.message); }
-        finally { btn.disabled = false; btn.textContent = '▶ Run'; }
-    }
-
-    async function runTimeTravel() {
-        const btn = document.getElementById('btnTimeTravel');
-        btn.disabled = true; btn.textContent = '⏳ Running...';
-
-        try {
-            // 1. Seed initial ops
-            addLog('info', 'TIME TRAVEL', '─── Step 1: Seeding 20 ops × 3 nodes ───');
-            for (const id of ['node-0', 'node-1', 'node-2']) {
-                await api('POST', '/api/apply', { node_id: id, amount: 1, count: 20 });
-            }
-            await fetchState();
-            const snapshotValue = state.authoritative_global;
-            const snapshotTime = new Date().toISOString();
-            addLog('info', 'TIME TRAVEL', `📸 Snapshot: global=${snapshotValue} at ${snapshotTime}`);
-            await sleep(1200); // ensure timestamp gap
-
-            // 2. Add more ops (these should be AFTER the snapshot)
-            addLog('info', 'TIME TRAVEL', '─── Step 2: Adding 30 more ops ───');
-            for (const id of ['node-0', 'node-1', 'node-2']) {
-                await api('POST', '/api/apply', { node_id: id, amount: 1, count: 10 });
-            }
-            await fetchState();
-            addLog('seed', 'SEED', `Current global = ${state.authoritative_global} (> ${snapshotValue})`);
-            await sleep(500);
-
-            // 3. Temporal query at snapshot time
-            addLog('info', 'TIME TRAVEL', '─── Step 3: Temporal query at snapshot time ───');
-            const result = await api('GET', `/api/temporal?as_of=${encodeURIComponent(snapshotTime)}`);
-            addLog('info', 'TEMPORAL', `global_at_snapshot=${result.global_value}, current=${result.current_value}`);
-
-            const pass = result.global_value <= snapshotValue + 3 && result.global_value >= snapshotValue - 3;
-            addLog(pass ? 'info' : 'error', 'TIME TRAVEL',
-                pass ? `✅ Time-travel works — value at snapshot (${result.global_value}) ≈ expected (${snapshotValue})`
-                     : `⚠ Approximate — value at snapshot (${result.global_value}) vs expected (${snapshotValue})`);
-        } catch (e) { addLog('error', 'ERROR', e.message); }
-        finally { btn.disabled = false; btn.textContent = '▶ Run'; }
-    }
-
-    // =========================================================================
-    // Event Log
-    // =========================================================================
-    function addLog(type, action, detail) {
-        const container = document.getElementById('logEntries');
-        const entry = document.createElement('div');
-        entry.className = 'log-entry';
-        const time = new Date().toLocaleTimeString();
-        entry.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-action ${type}">${action}</span> <span class="log-detail">${detail}</span>`;
-        container.insertBefore(entry, container.firstChild);
-        while (container.children.length > 50) container.removeChild(container.lastChild);
-    }
-
-    // =========================================================================
-    // Utilities & Init
-    // =========================================================================
-    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-    // =========================================================================
-    // Infrastructure Status
-    // =========================================================================
-    async function fetchInfrastructure() {
-        try {
-            const res = await fetch('/api/infrastructure');
-            const infra = await res.json();
-
-            const pgEl = document.getElementById('infraPostgres');
-            const kafkaEl = document.getElementById('infraKafka');
-            const sqliteEl = document.getElementById('infraSqlite');
-
-            if (infra.coordinator === 'postgres') {
-                pgEl.querySelector('.infra-dot').className = 'infra-dot active';
-                pgEl.querySelector('span:last-child').textContent = 'Postgres ✓ connected';
-                sqliteEl.querySelector('span:last-child').textContent = 'SQLite ✓ nodes only';
-            }
-
-            if (infra.kafka === 'connected') {
-                kafkaEl.querySelector('.infra-dot').className = 'infra-dot active';
-                kafkaEl.querySelector('span:last-child').textContent = 'Kafka ✓ streaming';
-            }
-        } catch (e) {
-            // Silent — infra bar stays in default state
-        }
-    }
-
-    connectWS();
-    fetchObservability();
-    fetchInfrastructure();
-    // Fallback polling in case WebSocket fails
-    setInterval(() => { if (!ws || ws.readyState !== WebSocket.OPEN) fetchState(); }, 3000);
-    // Periodically refresh observability panels
-    setInterval(fetchObservability, 5000);
+        // Init
+        connectWS();
+        fetchInfra();
+        fetchControlStatus();
+        setInterval(fetchState, 1000); // fallback polling
+        fetchState();
     </script>
 </body>
 </html>

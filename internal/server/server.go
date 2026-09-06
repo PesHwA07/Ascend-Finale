@@ -51,16 +51,18 @@ type InfrastructureInfo struct {
 	PostgresHost string `json:"postgres_host,omitempty"`
 }
 
-// StartWithInfra launches the server with infrastructure status info.
-// This is the preferred entry point when Postgres/Kafka flags are configured.
-func StartWithInfra(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *events.Bus, infra InfrastructureInfo) error {
-	// Store infra info so the handler can access it
-	infraInfo = infra
-	return Start(addr, dashboardFS, sim, bus)
-}
-
 // infraInfo holds the current infrastructure configuration (set by StartWithInfra).
 var infraInfo = InfrastructureInfo{Coordinator: "sqlite", Kafka: "disabled"}
+
+// autoStreamerRef is set by StartWithInfra so streaming endpoints can control it.
+var autoStreamerRef *simulation.AutoStreamer
+
+// StartWithInfra launches the server with infrastructure status info and auto-streamer.
+func StartWithInfra(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *events.Bus, infra InfrastructureInfo, streamer *simulation.AutoStreamer) error {
+	infraInfo = infra
+	autoStreamerRef = streamer
+	return Start(addr, dashboardFS, sim, bus)
+}
 
 // Start launches the HTTP server on the given address.
 // dashboardFS is the embedded filesystem containing dashboard assets,
@@ -593,6 +595,91 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *e
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"nodes": allStats,
 		})
+	})
+
+	// =========================================================================
+	// Streaming Control Endpoints
+	// =========================================================================
+
+	// GET /api/streaming/status — current streaming configuration
+	mux.HandleFunc("/api/streaming/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if autoStreamerRef == nil {
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"streaming": false, "chaos": false, "interval_ms": 500,
+			})
+			return
+		}
+		cfg := autoStreamerRef.GetConfig()
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"streaming":   cfg.StreamEnabled,
+			"chaos":       cfg.ChaosEnabled,
+			"interval_ms": cfg.StreamInterval.Milliseconds(),
+			"chaos_interval_ms": cfg.ChaosInterval.Milliseconds(),
+		})
+	})
+
+	// POST /api/streaming/toggle — start/stop order streaming
+	mux.HandleFunc("/api/streaming/toggle", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if autoStreamerRef == nil {
+			http.Error(w, "streamer not initialized", http.StatusServiceUnavailable)
+			return
+		}
+		var body struct {
+			Enabled bool `json:"enabled"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		autoStreamerRef.SetStreamEnabled(body.Enabled)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"streaming": body.Enabled})
+	})
+
+	// POST /api/streaming/chaos — toggle chaos mode
+	mux.HandleFunc("/api/streaming/chaos", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if autoStreamerRef == nil {
+			http.Error(w, "streamer not initialized", http.StatusServiceUnavailable)
+			return
+		}
+		var body struct {
+			Enabled bool `json:"enabled"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		autoStreamerRef.SetChaosEnabled(body.Enabled)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]bool{"chaos": body.Enabled})
+	})
+
+	// POST /api/streaming/speed — change order generation speed
+	mux.HandleFunc("/api/streaming/speed", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if autoStreamerRef == nil {
+			http.Error(w, "streamer not initialized", http.StatusServiceUnavailable)
+			return
+		}
+		var body struct {
+			IntervalMs int `json:"interval_ms"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		if body.IntervalMs < 100 {
+			body.IntervalMs = 100 // minimum 100ms
+		}
+		if body.IntervalMs > 5000 {
+			body.IntervalMs = 5000 // maximum 5s
+		}
+		autoStreamerRef.SetStreamInterval(time.Duration(body.IntervalMs) * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]int{"interval_ms": body.IntervalMs})
 	})
 
 	log.Printf("HTTP server listening on %s", addr)

@@ -289,6 +289,35 @@ External Infrastructure (Docker Compose):
 | `-db-dir` | `./data` | Where per-node SQLite files are stored |
 | `-reset` | `false` | **Wipe all data** and start fresh on startup |
 
+## Getting Started
+
+### 1. Start the Infrastructure (Postgres + Kafka)
+The production pipeline uses Postgres and Kafka. Start them via Docker Compose:
+```bash
+docker-compose up -d
+```
+*(Note: Postgres uses `user=counterghost`, `password=counterghost_dev` as defined in `docker-compose.yml`)*
+
+### 2. Run CounterGhost
+You can run CounterGhost in two modes. The application uses CLI flags to connect to the infrastructure.
+
+**Production Mode (Postgres + Kafka):**
+Run the application with the connection strings for Postgres and Kafka:
+```bash
+go run . -postgres "postgres://counterghost:counterghost_dev@localhost:5432/counterghost?sslmode=disable" -kafka "localhost:9092"
+```
+
+**Demo Mode (SQLite Fallback):**
+If you don't have Docker or want to run entirely locally without dependencies, omit the flags. The system will fall back to using SQLite and direct in-memory sync:
+```bash
+go run .
+```
+
+You can also pass `-reset` to wipe the old databases and start fresh:
+```bash
+go run . -reset
+```
+
 ---
 
 ## 🌐 API Reference

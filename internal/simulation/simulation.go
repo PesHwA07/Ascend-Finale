@@ -19,10 +19,11 @@ import (
 
 // Simulation manages N simulated nodes and their shared coordinator DB.
 type Simulation struct {
-	Nodes   []*node.Node
-	CoordDB *sql.DB
-	Seed    int64
-	Rng     *rand.Rand
+	Nodes       []*node.Node
+	CoordDB     *sql.DB
+	UsePostgres bool
+	Seed        int64
+	Rng         *rand.Rand
 
 	mu      sync.RWMutex
 	nodeDBs []*sql.DB // tracked for cleanup
@@ -86,6 +87,9 @@ func (s *Simulation) NaiveGlobalValue() int64 {
 // DB's durable operation log. This is the ground truth — it includes every
 // operation that was ever successfully written, regardless of node crashes.
 func (s *Simulation) AuthoritativeGlobalValue() (int64, error) {
+	if s.UsePostgres {
+		return db.SumAmountsPG(s.CoordDB)
+	}
 	return db.SumAmounts(s.CoordDB)
 }
 

@@ -141,12 +141,7 @@ func (n *Node) ApplyDelta(amount int64) (*model.Operation, error) {
 		return nil, fmt.Errorf("node %s: commit tx: %w", n.ID, err)
 	}
 
-	// Also do direct coordinator write (belt-and-suspenders with outbox)
-	// OutboxSyncer will handle it if this fails
-	if _, err := db.InsertOperation(n.CoordDB, op); err != nil {
-		log.Printf("WARNING: node %s: coordinator insert failed (outbox syncer will retry): %v",
-			n.ID, err)
-	}
+	// The outbox syncer agent will reliably sync this operation to the coordinator/Kafka.
 
 	// Update in-memory state
 	n.nextSeq++
