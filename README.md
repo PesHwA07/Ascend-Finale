@@ -111,46 +111,55 @@ Added production-ready data pipeline patterns and infrastructure scaffolding for
 │  ┌──────────┐   ┌──────────┐   ┌──────────┐                    │
 │  │  node-0  │   │  node-1  │   │  node-2  │   ← Per-node       │
 │  │ (SQLite) │   │ (SQLite) │   │ (SQLite) │     SQLite files    │
+│  │ +outbox  │   │ +outbox  │   │ +outbox  │   ← v3 outbox      │
 │  └────┬─────┘   └────┬─────┘   └────┬─────┘                    │
 │       │              │              │                            │
 │       └──────────────┼──────────────┘                            │
-│                      │ dual-write                                │
+│                      │ atomic tx (op + outbox)                   │
 │              ┌───────▼────────┐                                  │
 │              │ Coordinator DB │  ← Source of truth (SQLite)      │
 │              │ (operation log)│                                   │
+│              │ +audit_log    │  ← v3 audit trail                │
+│              │ +dead_letter  │  ← v3 DLQ                        │
 │              └───────┬────────┘                                  │
 │                      │                                           │
-│       ┌──────────────┼──────────────┐                            │
-│       │              │              │                            │
-│  ┌────▼─────┐  ┌─────▼─────┐  ┌────▼──────┐                    │
-│  │ Sentinel │  │Reconciler │  │ Event Bus │  ← v2.0 agents     │
-│  │ (5s poll)│  │ (10s poll)│  │ (pub/sub) │                     │
-│  └──────────┘  └───────────┘  └─────┬─────┘                    │
-│                                     │                            │
-│              ┌──────────────────────▼──────────────┐            │
-│              │ HTTP Server + WebSocket              │            │
-│              │ ┌──────────┐  ┌───────────────────┐ │            │
-│              │ │ REST API │  │ WebSocket Push    │ │            │
-│              │ │ 10 endpts│  │ Real-time events  │ │            │
-│              │ └──────────┘  └───────────────────┘ │            │
-│              └──────────────────────┬──────────────┘            │
-│                                     │ go:embed                   │
-│              ┌──────────────────────▼──────────────┐            │
-│              │ Dashboard (HTML/CSS/JS)              │            │
-│              │ ┌────────────┐  ┌─────────────────┐ │            │
-│              │ │Chaos Panel │  │Agent Dashboard  │ │            │
-│              │ │ (control)  │  │ (monitoring)    │ │            │
-│              │ └────────────┘  └─────────────────┘ │            │
-│              └─────────────────────────────────────┘            │
+│    ┌─────────────────┼─────────────────────┐                    │
+│    │                 │                     │                    │
+│  ┌─▼────────┐  ┌─────▼─────┐  ┌───────────▼──┐                │
+│  │ Sentinel │  │Reconciler │  │OutboxSyncer  │  ← 3 agents    │
+│  │ (5s poll)│  │ (10s poll)│  │  (3s poll)   │                 │
+│  └──────────┘  └───────────┘  └──────┬───────┘                 │
+│                                      │                          │
+│              ┌───────────────────────▼──────────┐              │
+│              │ Event Bus (pub/sub)               │              │
+│              └───────────────────────┬──────────┘              │
+│                                      │                          │
+│              ┌───────────────────────▼──────────┐              │
+│              │ HTTP Server + WebSocket            │              │
+│              │ ┌──────────┐  ┌────────────────┐ │              │
+│              │ │ REST API │  │ WebSocket Push │ │              │
+│              │ │ 13 endpts│  │ Real-time evts │ │              │
+│              │ └──────────┘  └────────────────┘ │              │
+│              └───────────────────────┬──────────┘              │
+│                                      │ go:embed                 │
+│              ┌───────────────────────▼──────────┐              │
+│              │ Dashboard (HTML/CSS/JS)           │              │
+│              │ ┌────────────┐  ┌──────────────┐ │              │
+│              │ │Chaos Panel │  │Agent Monitor │ │              │
+│              │ │ (control)  │  │ (observe)    │ │              │
+│              │ └────────────┘  └──────────────┘ │              │
+│              └──────────────────────────────────┘              │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow
-1. **Apply** → Op gets a UUID, writes to both node DB and coordinator DB
-2. **Crash** → Random ops deleted from node DB; coordinator retains all
-3. **Detect** → Sentinel polls health; Reconciler checks `naive ≠ auth`
-4. **Repair** → Coordinator ops replayed to node via `INSERT OR IGNORE`
-5. **Verify** → `naive == auth` again; invariants hold
+1. **Apply** → Op + outbox entry written in one atomic SQLite transaction
+2. **Outbox Sync** → OutboxSyncer drains outbox entries to coordinator every 3s
+3. **Crash** → Random ops deleted from node DB; coordinator retains all
+4. **Detect** → Sentinel polls health; Reconciler checks `naive ≠ auth`
+5. **Repair** → Coordinator ops replayed to node via `INSERT OR IGNORE`
+6. **Audit** → Every mutation logged to `audit_log` table
+7. **Verify** → `naive == auth` again; invariants hold
 
 ---
 
@@ -159,22 +168,30 @@ Added production-ready data pipeline patterns and infrastructure scaffolding for
 ```
 .
 ├── main.go                              # Entry point, go:embed, agent wiring
+├── docker-compose.yml                   # Kafka + Postgres scaffolding [v3]
 ├── dashboard/
 │   ├── index.html                       # Chaos Panel (control center)
 │   └── agents.html                      # Agent Dashboard (monitoring) [v2]
+├── migrations/
+│   └── 001_initial.sql                  # Postgres schema (Phase 2 ready) [v3]
 ├── internal/
 │   ├── config/config.go                 # CLI flag parsing
 │   ├── model/model.go                   # Core types: Operation, ReconciliationResult
-│   ├── db/db.go                         # SQLite CRUD, schema, temporal queries
+│   ├── db/                              # Storage layer
+│   │   ├── db.go                        # SQLite CRUD, schema, temporal queries
+│   │   ├── audit.go                     # Audit log table + CRUD [v3]
+│   │   ├── outbox.go                    # Transactional outbox pattern [v3]
+│   │   └── dlq.go                       # Dead letter queue [v3]
 │   ├── events/bus.go                    # Event bus: pub/sub + event types [v2]
-│   ├── agents/                          # Autonomous agents [v2]
-│   │   ├── sentinel.go                  # Health monitor (node_down/node_up)
-│   │   └── reconciler.go               # Auto-reconciliation on divergence
+│   ├── agents/                          # Autonomous agents [v2+]
+│   │   ├── sentinel.go                  # Health monitor (5s poll) [v2]
+│   │   ├── reconciler.go               # Auto-reconciliation (10s poll) [v2]
+│   │   └── outbox_syncer.go            # Outbox → coordinator sync (3s poll) [v3]
 │   ├── node/
-│   │   ├── node.go                      # Node engine: ApplyDelta, epochs, state
+│   │   ├── node.go                      # Node engine: transactional outbox ApplyDelta
 │   │   └── node_test.go                 # 12 node-level tests
 │   ├── server/
-│   │   ├── server.go                    # HTTP server, 10 API endpoints
+│   │   ├── server.go                    # HTTP server, 13 API endpoints + audit middleware
 │   │   └── websocket.go                # WebSocket hub + broadcast [v2]
 │   └── simulation/
 │       ├── simulation.go                # Simulation manager, dual aggregation
@@ -187,6 +204,7 @@ Added production-ready data pipeline patterns and infrastructure scaffolding for
 │       ├── reconcile_test.go            # 5 reconciliation tests
 │       └── invariant_test.go            # 6 invariants + Scenario A+B
 ├── CounterGhost_PRD.md                  # Product requirements document
+├── counterghost-agent-architecture.md   # Phase 2 architecture deep dive
 ├── go.mod / go.sum                      # Dependencies (pure Go SQLite)
 └── README.md                            # This file
 ```
@@ -226,6 +244,13 @@ Added production-ready data pipeline patterns and infrastructure scaffolding for
 | `GET` | `/api/temporal?as_of=` | **Time-travel**: query global counter at any past timestamp |
 | `WS` | `/ws` | **WebSocket**: real-time event stream to dashboard |
 
+### Production Endpoints (v3)
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/audit` | **Audit log**: query all state-mutating actions (filter by `action`, `resource_id`, `limit`) |
+| `GET` | `/api/dlq` | **Dead letter queue**: view operations that failed outbox sync 5+ times |
+| `GET` | `/api/outbox` | **Outbox stats**: sync status per node (or all nodes if no `node_id` param) |
+
 ### Example: Temporal Query
 ```bash
 # What was the global counter 30 seconds ago?
@@ -233,6 +258,18 @@ GET /api/temporal?as_of=-30s
 
 # What was the global counter at a specific time?
 GET /api/temporal?as_of=2024-09-06T01:00:00Z
+```
+
+### Example: Audit & DLQ
+```bash
+# Show all crash actions
+GET /api/audit?action=crash&limit=10
+
+# Show dead letter queue
+GET /api/dlq
+
+# Show outbox sync stats for node-0
+GET /api/outbox?node_id=node-0
 ```
 
 ---
