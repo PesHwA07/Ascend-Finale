@@ -105,61 +105,80 @@ Added production-ready data pipeline patterns and infrastructure scaffolding for
 ## 🏗️ Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         Go Binary                                │
-│                                                                  │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐                    │
-│  │  node-0  │   │  node-1  │   │  node-2  │   ← Per-node       │
-│  │ (SQLite) │   │ (SQLite) │   │ (SQLite) │     SQLite files    │
-│  │ +outbox  │   │ +outbox  │   │ +outbox  │   ← v3 outbox      │
-│  └────┬─────┘   └────┬─────┘   └────┬─────┘                    │
-│       │              │              │                            │
-│       └──────────────┼──────────────┘                            │
-│                      │ atomic tx (op + outbox)                   │
-│              ┌───────▼────────┐                                  │
-│              │ Coordinator DB │  ← Source of truth (SQLite)      │
-│              │ (operation log)│                                   │
-│              │ +audit_log    │  ← v3 audit trail                │
-│              │ +dead_letter  │  ← v3 DLQ                        │
-│              └───────┬────────┘                                  │
-│                      │                                           │
-│    ┌─────────────────┼─────────────────────┐                    │
-│    │                 │                     │                    │
-│  ┌─▼────────┐  ┌─────▼─────┐  ┌───────────▼──┐                │
-│  │ Sentinel │  │Reconciler │  │OutboxSyncer  │  ← 3 agents    │
-│  │ (5s poll)│  │ (10s poll)│  │  (3s poll)   │                 │
-│  └──────────┘  └───────────┘  └──────┬───────┘                 │
-│                                      │                          │
-│              ┌───────────────────────▼──────────┐              │
-│              │ Event Bus (pub/sub)               │              │
-│              └───────────────────────┬──────────┘              │
-│                                      │                          │
-│              ┌───────────────────────▼──────────┐              │
-│              │ HTTP Server + WebSocket            │              │
-│              │ ┌──────────┐  ┌────────────────┐ │              │
-│              │ │ REST API │  │ WebSocket Push │ │              │
-│              │ │ 13 endpts│  │ Real-time evts │ │              │
-│              │ └──────────┘  └────────────────┘ │              │
-│              └───────────────────────┬──────────┘              │
-│                                      │ go:embed                 │
-│              ┌───────────────────────▼──────────┐              │
-│              │ Dashboard (HTML/CSS/JS)           │              │
-│              │ ┌────────────┐  ┌──────────────┐ │              │
-│              │ │Chaos Panel │  │Agent Monitor │ │              │
-│              │ │ (control)  │  │ (observe)    │ │              │
-│              │ └────────────┘  └──────────────┘ │              │
-│              └──────────────────────────────────┘              │
-└──────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          CounterGhost Cluster                          │
+│                                                                         │
+│  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐           │
+│  │    Node 0       │  │    Node 1       │  │    Node 2       │          │
+│  │  ┌───────────┐ │  │  ┌───────────┐ │  │  ┌───────────┐ │          │
+│  │  │ Postgres  │ │  │  │ Postgres  │ │  │  │ Postgres  │ │          │
+│  │  │ (local)   │ │  │  │ (local)   │ │  │  │ (local)   │ │          │
+│  │  │ +outbox   │ │  │  │ +outbox   │ │  │  │ +outbox   │ │          │
+│  │  └─────┬─────┘ │  │  └─────┬─────┘ │  │  └─────┬─────┘ │          │
+│  └────────┼────────┘  └────────┼────────┘  └────────┼────────┘          │
+│           │                    │                    │                    │
+│           └────────────────────┼────────────────────┘                    │
+│                    atomic tx   │  (op + outbox entry)                    │
+│                                │                                         │
+│              ┌─────────────────▼──────────────────┐                     │
+│              │    Kafka (KRaft — no ZooKeeper)     │                     │
+│              │    ┌───────────────────────────┐   │                     │
+│              │    │ Topic: counter.operations  │   │                     │
+│              │    │ Partitions: 3 │ RF: 3      │   │                     │
+│              │    │ acks=all │ idempotent      │   │                     │
+│              │    └───────────────────────────┘   │                     │
+│              └─────────────────┬──────────────────┘                     │
+│                                │                                         │
+│           ┌────────────────────┼─────────────────────┐                  │
+│           │                    │                     │                  │
+│  ┌────────▼────────┐  ┌───────▼────────┐  ┌─────────▼──────────┐      │
+│  │   Coordinator    │  │  Audit Store   │  │  Dead Letter Queue │      │
+│  │   (Postgres)     │  │  (Postgres)    │  │    (Postgres)      │      │
+│  │  operation log   │  │  audit_log     │  │  failed ops → DLQ  │      │
+│  │  JSONB manifests │  │  JSONB details │  │  manual inspection │      │
+│  └────────┬─────────┘  └────────────────┘  └────────────────────┘      │
+│           │                                                              │
+│  ┌────────┼──────────────────────────────────┐                          │
+│  │        │                                  │                          │
+│  │  ┌─────▼──────┐ ┌───────────┐ ┌──────────▼───┐                     │
+│  │  │  Sentinel  │ │Reconciler │ │OutboxSyncer  │   ← 3 Autonomous   │
+│  │  │  (5s poll) │ │ (10s poll)│ │  (3s poll)   │     Agents          │
+│  │  └────────────┘ └───────────┘ └──────────────┘                     │
+│  └───────────────────────────────────────────────┘                      │
+│                                │                                         │
+│              ┌─────────────────▼──────────────────┐                     │
+│              │  Event Bus (in-process pub/sub)     │                     │
+│              └─────────────────┬──────────────────┘                     │
+│                                │                                         │
+│              ┌─────────────────▼──────────────────┐                     │
+│              │  HTTP Server + WebSocket             │                     │
+│              │  13 REST endpoints │ real-time push  │                     │
+│              └─────────────────┬──────────────────┘                     │
+│                                │ go:embed                                │
+│              ┌─────────────────▼──────────────────┐                     │
+│              │  Dashboard (HTML/CSS/JS)             │                     │
+│              │  Chaos Panel │ Agent Monitor         │                     │
+│              └────────────────────────────────────┘                     │
+└─────────────────────────────────────────────────────────────────────────┘
+
+External Infrastructure (Docker Compose):
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ Kafka 3.7    │  │ Postgres 16  │  │  Kafka UI    │
+│ KRaft mode   │  │  Alpine      │  │  :8090       │
+│ :9092        │  │  :5432       │  │  (optional)  │
+└──────────────┘  └──────────────┘  └──────────────┘
 ```
 
 ### Data Flow
-1. **Apply** → Op + outbox entry written in one atomic SQLite transaction
-2. **Outbox Sync** → OutboxSyncer drains outbox entries to coordinator every 3s
-3. **Crash** → Random ops deleted from node DB; coordinator retains all
-4. **Detect** → Sentinel polls health; Reconciler checks `naive ≠ auth`
-5. **Repair** → Coordinator ops replayed to node via `INSERT OR IGNORE`
-6. **Audit** → Every mutation logged to `audit_log` table
-7. **Verify** → `naive == auth` again; invariants hold
+1. **Apply** → Op + outbox entry written in one atomic Postgres transaction
+2. **Outbox Sync** → OutboxSyncer drains outbox to Kafka topic every 3s
+3. **Consume** → Coordinator consumes from Kafka, writes to Postgres coordinator DB
+4. **Crash** → Node state lost; Kafka retains all operations immutably
+5. **Detect** → Sentinel polls health; Reconciler checks `naive ≠ auth`
+6. **Repair** → Kafka ops replayed to node via idempotent insert
+7. **Audit** → Every mutation logged to `audit_log` table (JSONB details)
+8. **DLQ** → Operations failing 5+ syncs moved to dead letter queue
+9. **Verify** → `naive == auth` again; all 6 invariants hold
 
 ---
 
@@ -391,13 +410,13 @@ The **monitoring view** — watch autonomous agents detect and repair faults in 
 
 ---
 
-## 🔒 v3 Production Patterns (current)
+## 🔒 Production Patterns
 
 ### Transactional Outbox
-Every `ApplyDelta` now writes **both** the operation and an outbox entry in a **single atomic SQLite transaction**. The OutboxSyncer agent asynchronously drains outbox entries to the coordinator, guaranteeing eventual consistency even if the coordinator is temporarily unreachable.
+Every `ApplyDelta` writes **both** the operation and an outbox entry in a **single atomic transaction**. The OutboxSyncer agent asynchronously drains outbox entries to Kafka, guaranteeing exactly-once delivery even if the broker is temporarily unreachable.
 
 ```
-Node DB Transaction:
+Node Postgres Transaction:
   ┌─────────────────────────────────┐
   │ INSERT INTO operations ...      │ ← counter operation
   │ INSERT INTO operation_outbox ...│ ← outbox entry
@@ -405,62 +424,66 @@ Node DB Transaction:
   └─────────────────────────────────┘
        │
        ▼ (async, every 3s)
-  OutboxSyncer → Coordinator DB
+  OutboxSyncer → Kafka → Coordinator Postgres
 ```
 
+### Kafka Event Log
+Operations flow through a Kafka topic (`counter.operations`) with:
+- **KRaft mode** — no ZooKeeper dependency
+- **3 partitions** — parallel consumption per node
+- **`acks=all`** — no data loss, every write acknowledged by all replicas
+- **Idempotent producer** — exactly-once semantics
+
 ### Audit Trail
-Every state-mutating API call (`apply`, `crash`, `reconcile`, `rebuild`) is recorded in the `audit_log` table with timestamp, action, resource, and details. Query via `GET /api/audit`.
+Every state-mutating API call (`apply`, `crash`, `reconcile`, `rebuild`) is recorded in the `audit_log` table with timestamp, action, resource, and JSONB details. Query via `GET /api/audit`.
 
 ### Dead Letter Queue
 Operations that fail outbox sync 5+ times are moved to the `dead_letter_queue` table for manual inspection instead of being retried forever. Query via `GET /api/dlq`.
 
-### New v3 API Endpoints
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/audit` | Query audit trail (filter by action, resource_id) |
-| `GET` | `/api/dlq` | View dead letter queue entries |
-| `GET` | `/api/outbox` | View outbox sync stats per node |
+### Postgres Schema Design
+Production-grade schema with:
+- **TIMESTAMPTZ** for all temporal fields (not TEXT)
+- **JSONB** columns for manifests and audit details (indexed, queryable)
+- **Partial indexes** on outbox (`WHERE synced = FALSE`) — only scan unsynced rows
+- **GIN indexes** on JSONB fields for fast detail queries
+- **Unique constraints** on `(node_id, epoch, sequence)` — database-level dedup
+
+```bash
+# Start the full production stack
+docker-compose up -d
+
+# Services:
+#   Kafka     → localhost:9092
+#   Postgres  → localhost:5432 (counterghost/counterghost_dev)
+#   Kafka UI  → localhost:8090 (visual topic inspector)
+```
 
 ---
 
-## 🚀 Production Roadmap
+## 🚀 Scaling Architecture
 
-### Phase 2: Kafka + Postgres (Docker Compose ready)
-> **Status**: Scaffolding complete (`docker-compose.yml` + `migrations/001_initial.sql`)
-
-| Component | What | Why |
-|---|---|---|
-| **Kafka** (KRaft) | Replace coordinator SQLite with Kafka topic | Multi-consumer, replayability, `acks=all` durability |
-| **Postgres** 16 | Replace per-node SQLite files | Concurrent writers (MVCC), PITR, JSONB manifests |
-| **Storage Interface** | `OperationStore` interface in Go | Swap SQLite ↔ Postgres without changing business logic |
-
-```bash
-# Start the production stack
-docker-compose up -d
-
-# Kafka UI at http://localhost:8090
-# Postgres at localhost:5432 (counterghost/counterghost_dev)
-```
-
-### Phase 3: Service Mesh (Istio)
+### Service Mesh (Istio)
 | Feature | What It Solves |
 |---|---|
 | **mTLS** | Encrypt all service-to-service communication |
 | **Circuit Breakers** | Prevent cascading failures when coordinator is overloaded |
 | **Retries with Backoff** | Centralized retry policy across all services |
-| **Distributed Tracing** | End-to-end latency visibility (Node → Coordinator → Postgres) |
+| **Distributed Tracing** | End-to-end latency visibility (Node → Kafka → Postgres) |
 | **Rate Limiting** | Per-service quotas to prevent overload |
 
-### Phase 4: Horizontal Scaling
+### Horizontal Scaling
 | Feature | What It Enables |
 |---|---|
 | **Sharded Coordinators** | Consistent hashing: node → coordinator shard |
 | **Multi-Region** | us-east-1, us-west-2, eu-west-1 with cross-region Kafka |
 | **Prometheus + Grafana** | `counterghost_operations_total`, divergence gauge, outbox depth |
+| **Multi-Tenant Isolation** | `tenant_id` partitioning across all tables |
+| **Snapshotting** | Hourly checkpoints for fast replay (skip full log scan) |
 
 ---
 
 ## 📜 License
 
 Built for the Ascend Hackathon.
+
 
