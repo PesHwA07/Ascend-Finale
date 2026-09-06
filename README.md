@@ -104,6 +104,55 @@ Added production-ready data pipeline patterns and infrastructure scaffolding for
 
 ## 🏗️ Architecture
 
+CounterGhost is designed with a dual architecture: a lightweight pure-Go implementation for easy demonstration, and a production-ready Kafka/Postgres architecture for real-world scaling.
+
+### Core Demo Architecture (Single Binary)
+This is what runs when you execute the application. It uses pure-Go SQLite (`modernc.org/sqlite`) so you can run the entire simulation on one laptop without installing any external databases.
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                         Go Binary                                │
+│                                                                  │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐                    │
+│  │  node-0  │   │  node-1  │   │  node-2  │   ← Per-node       │
+│  │ (SQLite) │   │ (SQLite) │   │ (SQLite) │     SQLite files    │
+│  │ +outbox  │   │ +outbox  │   │ +outbox  │                    │
+│  └────┬─────┘   └────┬─────┘   └────┬─────┘                    │
+│       │              │              │                            │
+│       └──────────────┼──────────────┘                            │
+│                      │ atomic tx (op + outbox)                   │
+│              ┌───────▼────────┐                                  │
+│              │ Coordinator DB │  ← Source of truth (SQLite)      │
+│              │ (operation log)│                                   │
+│              │ +audit_log    │                                   │
+│              │ +dead_letter  │                                   │
+│              └───────┬────────┘                                  │
+│                      │                                           │
+│    ┌─────────────────┼─────────────────────┐                    │
+│    │                 │                     │                    │
+│  ┌─▼────────┐  ┌─────▼─────┐  ┌───────────▼──┐                │
+│  │ Sentinel │  │Reconciler │  │OutboxSyncer  │  ← 3 agents    │
+│  │ (5s poll)│  │ (10s poll)│  │  (3s poll)   │                 │
+│  └──────────┘  └───────────┘  └──────┬───────┘                 │
+│                                      │                          │
+│              ┌───────────────────────▼──────────┐              │
+│              │ Event Bus (pub/sub)               │              │
+│              └───────────────────────┬──────────┘              │
+│                                      │                          │
+│              ┌───────────────────────▼──────────┐              │
+│              │ HTTP Server + WebSocket            │              │
+│              │ 13 REST API endpoints             │              │
+│              └───────────────────────┬──────────┘              │
+│                                      │ go:embed                 │
+│              ┌───────────────────────▼──────────┐              │
+│              │ Dashboard (HTML/CSS/JS)           │              │
+│              └──────────────────────────────────┘              │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Production Architecture (Kafka + Postgres)
+This is the target architecture for production environments (scaffolding provided via `docker-compose.yml` and Postgres migrations).
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                          CounterGhost Cluster                          │
