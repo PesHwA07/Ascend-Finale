@@ -339,13 +339,127 @@
         .log-action.rebuild { color: var(--accent-purple); }
         .log-action.info { color: var(--accent-cyan); }
         .log-action.sentinel { color: var(--accent-purple); }
+        .log-action.audit { color: var(--accent-cyan); }
+        .log-action.outbox { color: var(--accent-orange); }
+        .log-action.dlq { color: var(--accent-red); }
         .log-action.error { color: var(--accent-red); }
         .log-detail { color: var(--text-secondary); }
 
+        /* ---- Production Observability Panels ---- */
+        .observability-grid {
+            display: grid; grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem; margin-bottom: 1.5rem;
+        }
+
+        .obs-panel {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 1.25rem;
+            position: relative; overflow: hidden;
+        }
+
+        .obs-panel::before {
+            content: ''; position: absolute;
+            top: 0; left: 0; right: 0; height: 2px;
+        }
+
+        .obs-panel.audit::before { background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue)); }
+        .obs-panel.outbox::before { background: linear-gradient(135deg, var(--accent-orange), #ed8936); }
+        .obs-panel.dlq::before { background: linear-gradient(135deg, var(--accent-red), #e53e3e); }
+
+        .obs-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .obs-title {
+            font-size: 0.7rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.08em;
+        }
+
+        .obs-panel.audit .obs-title { color: var(--accent-cyan); }
+        .obs-panel.outbox .obs-title { color: var(--accent-orange); }
+        .obs-panel.dlq .obs-title { color: var(--accent-red); }
+
+        .obs-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.6rem; font-weight: 600;
+            padding: 0.15rem 0.5rem; border-radius: 4px;
+        }
+
+        .obs-badge.count-audit { background: rgba(118,228,247,0.1); color: var(--accent-cyan); border: 1px solid rgba(118,228,247,0.2); }
+        .obs-badge.count-outbox { background: rgba(246,173,85,0.1); color: var(--accent-orange); border: 1px solid rgba(246,173,85,0.2); }
+        .obs-badge.count-dlq { background: rgba(252,129,129,0.1); color: var(--accent-red); border: 1px solid rgba(252,129,129,0.2); }
+        .obs-badge.count-dlq.empty { background: rgba(104,211,145,0.1); color: var(--accent-green); border: 1px solid rgba(104,211,145,0.2); }
+
+        .obs-list {
+            max-height: 160px; overflow-y: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.62rem; line-height: 1.7;
+        }
+
+        .obs-list::-webkit-scrollbar { width: 3px; }
+        .obs-list::-webkit-scrollbar-track { background: transparent; }
+        .obs-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+        .obs-row {
+            padding: 0.2rem 0; border-bottom: 1px solid rgba(42,48,64,0.4);
+            display: flex; gap: 0.5rem; align-items: baseline;
+        }
+
+        .obs-row-time { color: var(--text-muted); white-space: nowrap; }
+        .obs-row-action { font-weight: 600; white-space: nowrap; }
+        .obs-row-detail { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .obs-empty {
+            color: var(--text-muted); font-size: 0.65rem;
+            text-align: center; padding: 1.5rem 0;
+        }
+
+        .outbox-node-row {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0.35rem 0.5rem; margin-bottom: 0.3rem;
+            background: rgba(255,255,255,0.02); border-radius: var(--radius-sm);
+        }
+
+        .outbox-node-id { font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--accent-cyan); font-weight: 600; }
+        .outbox-node-stats { display: flex; gap: 0.75rem; font-size: 0.6rem; }
+        .outbox-stat { display: flex; align-items: center; gap: 0.25rem; }
+        .outbox-stat-label { color: var(--text-muted); }
+        .outbox-stat-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+        .outbox-stat-value.pending { color: var(--accent-orange); }
+        .outbox-stat-value.synced { color: var(--accent-green); }
+        .outbox-stat-value.failed { color: var(--accent-red); }
+
+        /* ---- Infrastructure Status Bar ---- */
+        .infra-bar {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            padding: 0.5rem 1.5rem;
+            background: rgba(30, 35, 50, 0.8);
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-secondary);
+        }
+        .infra-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .infra-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .infra-dot.active { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+        .infra-dot.inactive { background: #555; }
+
         /* ---- Responsive ---- */
         @media (max-width: 768px) {
-            .global-counters, .nodes-grid, .scenario-row { grid-template-columns: 1fr; }
+            .global-counters, .nodes-grid, .scenario-row, .observability-grid { grid-template-columns: 1fr; }
             .main { padding: 1rem; }
+            .infra-bar { flex-wrap: wrap; gap: 0.75rem; }
         }
     </style>
 </head>
@@ -364,6 +478,22 @@
             </div>
         </div>
     </header>
+
+    <!-- Infrastructure Status Bar -->
+    <div class="infra-bar" id="infraBar">
+        <div class="infra-item" id="infraSqlite">
+            <span class="infra-dot active"></span>
+            <span>SQLite ✓ local</span>
+        </div>
+        <div class="infra-item" id="infraPostgres">
+            <span class="infra-dot inactive"></span>
+            <span>Postgres ✗ demo mode</span>
+        </div>
+        <div class="infra-item" id="infraKafka">
+            <span class="infra-dot inactive"></span>
+            <span>Kafka ✗ demo mode</span>
+        </div>
+    </div>
 
     <main class="main">
 
@@ -405,7 +535,7 @@
                 <div class="scenario-desc">
                     After reconciliation, re-deliver crashed ops → Duplicates rejected → Count unchanged
                 </div>
-                <button class="btn btn-scenario" id="btnScenarioB" onclick="runScenarioB()" disabled>▶ Run Scenario B</button>
+                <button class="btn btn-scenario" id="btnScenarioB" onclick="runScenarioB()">▶ Run Scenario B</button>
             </div>
         </div>
 
@@ -432,6 +562,38 @@
                     Seed ops → record timestamp → add more ops → temporal query at old timestamp
                 </div>
                 <button class="btn btn-scenario" id="btnTimeTravel" onclick="runTimeTravel()">▶ Run</button>
+            </div>
+        </div>
+
+        <!-- Production Observability -->
+        <div class="section-title">Production Observability</div>
+        <div class="observability-grid">
+            <div class="obs-panel audit">
+                <div class="obs-header">
+                    <span class="obs-title">🔍 Audit Log</span>
+                    <span class="obs-badge count-audit" id="auditCount">0 entries</span>
+                </div>
+                <div class="obs-list" id="auditList">
+                    <div class="obs-empty">No audit entries yet</div>
+                </div>
+            </div>
+            <div class="obs-panel outbox">
+                <div class="obs-header">
+                    <span class="obs-title">📬 Outbox Status</span>
+                    <span class="obs-badge count-outbox" id="outboxCount">0 pending</span>
+                </div>
+                <div id="outboxList">
+                    <div class="obs-empty">No outbox data yet</div>
+                </div>
+            </div>
+            <div class="obs-panel dlq">
+                <div class="obs-header">
+                    <span class="obs-title">☠️ Dead Letter Queue</span>
+                    <span class="obs-badge count-dlq empty" id="dlqCount">0 — clean</span>
+                </div>
+                <div class="obs-list" id="dlqList">
+                    <div class="obs-empty">No poison pills — all operations healthy ✓</div>
+                </div>
             </div>
         </div>
 
@@ -497,6 +659,9 @@
             'node_up': 'sentinel',
             'divergence_detected': 'reconcile',
             'reconciliation_started': 'reconcile',
+            'outbox_synced': 'outbox',
+            'outbox_poison_pill': 'dlq',
+            'audit_logged': 'audit',
         };
         const logType = typeMap[event.type] || 'info';
         const label = event.type.toUpperCase().replace(/_/g, ' ');
@@ -505,6 +670,10 @@
         // Refresh state on significant events
         if (['crash_injected', 'reconciliation_complete', 'operation_applied', 'replay_rejected'].includes(event.type)) {
             fetchState();
+        }
+        // Refresh observability panels on relevant events
+        if (['outbox_synced', 'outbox_poison_pill', 'audit_logged', 'crash_injected', 'reconciliation_complete', 'operation_applied'].includes(event.type)) {
+            fetchObservability();
         }
     }
 
@@ -524,6 +693,85 @@
             state = await api('GET', '/api/state');
             updateUI();
         } catch (e) { /* silent */ }
+    }
+
+    async function fetchObservability() {
+        try {
+            const [auditRes, dlqRes, outboxRes] = await Promise.all([
+                api('GET', '/api/audit?limit=20'),
+                api('GET', '/api/dlq?limit=20'),
+                api('GET', '/api/outbox'),
+            ]);
+            renderAuditPanel(auditRes);
+            renderDLQPanel(dlqRes);
+            renderOutboxPanel(outboxRes);
+        } catch (e) { /* silent */ }
+    }
+
+    function renderAuditPanel(data) {
+        const list = document.getElementById('auditList');
+        const badge = document.getElementById('auditCount');
+        const entries = data.entries || [];
+        badge.textContent = `${data.count || 0} entries`;
+        if (entries.length === 0) {
+            list.innerHTML = '<div class="obs-empty">No audit entries yet</div>';
+            return;
+        }
+        list.innerHTML = entries.map(e => {
+            const t = new Date(e.timestamp).toLocaleTimeString();
+            const actionColor = e.action === 'crash' ? 'var(--accent-red)' : e.action === 'reconcile' ? 'var(--accent-green)' : 'var(--accent-cyan)';
+            return `<div class="obs-row"><span class="obs-row-time">[${t}]</span> <span class="obs-row-action" style="color:${actionColor}">${e.action}</span> <span class="obs-row-detail">${e.resource_id} — ${e.details || ''}</span></div>`;
+        }).join('');
+    }
+
+    function renderDLQPanel(data) {
+        const list = document.getElementById('dlqList');
+        const badge = document.getElementById('dlqCount');
+        const entries = data.entries || [];
+        const count = data.total_count || 0;
+        if (count === 0) {
+            badge.textContent = '0 — clean';
+            badge.className = 'obs-badge count-dlq empty';
+            list.innerHTML = '<div class="obs-empty">No poison pills — all operations healthy ✓</div>';
+            return;
+        }
+        badge.textContent = `${count} entries`;
+        badge.className = 'obs-badge count-dlq';
+        list.innerHTML = entries.map(e => {
+            const t = new Date(e.failed_at).toLocaleTimeString();
+            return `<div class="obs-row"><span class="obs-row-time">[${t}]</span> <span class="obs-row-action" style="color:var(--accent-red)">POISON</span> <span class="obs-row-detail">${e.node_id} — ${e.error_reason || 'unknown'}</span></div>`;
+        }).join('');
+    }
+
+    function renderOutboxPanel(data) {
+        const container = document.getElementById('outboxList');
+        const badge = document.getElementById('outboxCount');
+        const nodes = data.nodes || {};
+        const nodeIds = Object.keys(nodes).sort();
+        if (nodeIds.length === 0) {
+            badge.textContent = '0 pending';
+            container.innerHTML = '<div class="obs-empty">No outbox data yet</div>';
+            return;
+        }
+        let totalPending = 0;
+        let html = '';
+        for (const id of nodeIds) {
+            const s = nodes[id];
+            const pending = s.pending || 0;
+            const synced = s.synced || 0;
+            const failed = s.failed || 0;
+            totalPending += pending;
+            html += `<div class="outbox-node-row">
+                <span class="outbox-node-id">${id}</span>
+                <div class="outbox-node-stats">
+                    <span class="outbox-stat"><span class="outbox-stat-label">pending</span> <span class="outbox-stat-value pending">${pending}</span></span>
+                    <span class="outbox-stat"><span class="outbox-stat-label">synced</span> <span class="outbox-stat-value synced">${synced}</span></span>
+                    <span class="outbox-stat"><span class="outbox-stat-label">failed</span> <span class="outbox-stat-value failed">${failed}</span></span>
+                </div>
+            </div>`;
+        }
+        badge.textContent = `${totalPending} pending`;
+        container.innerHTML = html;
     }
 
     // =========================================================================
@@ -689,22 +937,48 @@
     }
 
     async function runScenarioB() {
-        if (!scenarioADone) return;
         const btn = document.getElementById('btnScenarioB');
         btn.disabled = true; btn.textContent = '⏳ Running...';
 
         try {
+            // Step 1: Seed ops so there's data to crash
+            addLog('info', 'SCENARIO B', '─── Step 1: Seeding 40 ops on node-0 ───');
+            await api('POST', '/api/apply', { node_id: 'node-0', amount: 1, count: 40 });
+            await fetchState();
+            addLog('seed', 'SEED', `node-0 seeded — global = ${state.authoritative_global}`);
+            await sleep(600);
+
+            // Step 2: Crash node-0 (stores crashed ops in memory for replay)
+            addLog('info', 'SCENARIO B', '─── Step 2: Crashing node-0 (deletes 8 ops) ───');
+            const crashRes = await api('POST', '/api/crash', { node_id: 'node-0', delete_count: 8 });
+            await fetchState();
+            addLog('crash', 'CRASH', `node-0: lost ${crashRes.deleted_count} ops — naive=${state.naive_global} (WRONG), auth=${state.authoritative_global} (correct)`);
+            await sleep(800);
+
+            // Step 3: Reconcile — fix the missing ops
+            addLog('info', 'SCENARIO B', '─── Step 3: Reconciling node-0 (re-inserting missing ops) ───');
+            const reconRes = await api('POST', '/api/reconcile', { node_id: 'node-0' });
+            await fetchState();
+            addLog('reconcile', 'RECONCILE', `Found ${reconRes.missing_count} missing, replayed ${reconRes.replayed_count} — naive=${state.naive_global}, auth=${state.authoritative_global}`);
+            await sleep(800);
+
+            // Step 4: THE KEY TEST — Replay the crashed ops again
+            // These ops already exist (reconcile put them back). UUID dedup must reject ALL of them.
             const globalBefore = state.naive_global;
-            addLog('info', 'SCENARIO B', '─── Replaying pre-crash ops ───');
+            addLog('info', 'SCENARIO B', '─── Step 4: Replaying crashed ops (should ALL be duplicates) ───');
             const result = await api('POST', '/api/replay', { node_id: 'node-0' });
             await fetchState();
             addLog('replay', 'REPLAY', `Attempted ${result.attempted_count} ops — dups_ignored=${result.duplicates_ignored}, new_inserts=${result.new_inserts}`);
 
-            if (result.new_inserts === 0) {
-                addLog('info', 'SCENARIO B', `✅ Complete — all duplicates rejected, global unchanged at ${state.naive_global}`);
+            if (result.new_inserts === 0 && result.duplicates_ignored > 0) {
+                addLog('info', 'SCENARIO B', `✅ PASSED — all ${result.duplicates_ignored} duplicates rejected, global unchanged at ${state.naive_global}`);
+            } else if (result.new_inserts === 0) {
+                addLog('info', 'SCENARIO B', `✅ Complete — no new inserts, global unchanged at ${state.naive_global}`);
             } else {
-                addLog('error', 'SCENARIO B', `❌ FAIL — ${result.new_inserts} new inserts (should be 0)`);
+                addLog('error', 'SCENARIO B', `❌ FAIL — ${result.new_inserts} new inserts (should be 0), global went from ${globalBefore} to ${state.naive_global}`);
             }
+
+            scenarioADone = true;
         } catch (e) { addLog('error', 'ERROR', e.message); }
         finally { btn.disabled = false; btn.textContent = '▶ Run Scenario B'; }
     }
@@ -843,9 +1117,40 @@
     // =========================================================================
     function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+    // =========================================================================
+    // Infrastructure Status
+    // =========================================================================
+    async function fetchInfrastructure() {
+        try {
+            const res = await fetch('/api/infrastructure');
+            const infra = await res.json();
+
+            const pgEl = document.getElementById('infraPostgres');
+            const kafkaEl = document.getElementById('infraKafka');
+            const sqliteEl = document.getElementById('infraSqlite');
+
+            if (infra.coordinator === 'postgres') {
+                pgEl.querySelector('.infra-dot').className = 'infra-dot active';
+                pgEl.querySelector('span:last-child').textContent = 'Postgres ✓ connected';
+                sqliteEl.querySelector('span:last-child').textContent = 'SQLite ✓ nodes only';
+            }
+
+            if (infra.kafka === 'connected') {
+                kafkaEl.querySelector('.infra-dot').className = 'infra-dot active';
+                kafkaEl.querySelector('span:last-child').textContent = 'Kafka ✓ streaming';
+            }
+        } catch (e) {
+            // Silent — infra bar stays in default state
+        }
+    }
+
     connectWS();
+    fetchObservability();
+    fetchInfrastructure();
     // Fallback polling in case WebSocket fails
     setInterval(() => { if (!ws || ws.readyState !== WebSocket.OPEN) fetchState(); }, 3000);
+    // Periodically refresh observability panels
+    setInterval(fetchObservability, 5000);
     </script>
 </body>
 </html>

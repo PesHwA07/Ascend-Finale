@@ -42,6 +42,26 @@ type applyResponse struct {
 	AuthoritativeGlobal int64             `json:"authoritative_global"`
 }
 
+// InfrastructureInfo describes which backends are active.
+// Exposed via GET /api/infrastructure so the dashboard can show status.
+type InfrastructureInfo struct {
+	Coordinator  string `json:"coordinator"`   // "sqlite" or "postgres"
+	Kafka        string `json:"kafka"`          // "connected" or "disabled"
+	KafkaBroker  string `json:"kafka_broker,omitempty"`
+	PostgresHost string `json:"postgres_host,omitempty"`
+}
+
+// StartWithInfra launches the server with infrastructure status info.
+// This is the preferred entry point when Postgres/Kafka flags are configured.
+func StartWithInfra(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *events.Bus, infra InfrastructureInfo) error {
+	// Store infra info so the handler can access it
+	infraInfo = infra
+	return Start(addr, dashboardFS, sim, bus)
+}
+
+// infraInfo holds the current infrastructure configuration (set by StartWithInfra).
+var infraInfo = InfrastructureInfo{Coordinator: "sqlite", Kafka: "disabled"}
+
 // Start launches the HTTP server on the given address.
 // dashboardFS is the embedded filesystem containing dashboard assets,
 // passed in from main.go where the go:embed directive lives.
@@ -93,6 +113,12 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *e
 	mux.HandleFunc("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
+	})
+
+	// GET /api/infrastructure — returns which backends are active
+	mux.HandleFunc("/api/infrastructure", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(infraInfo)
 	})
 
 	// GET /api/state — returns all node states + both global aggregations

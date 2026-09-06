@@ -14,16 +14,25 @@ import (
 
 	"github.com/PesHwA07/Ascend-Finale/internal/db"
 	"github.com/PesHwA07/Ascend-Finale/internal/events"
+	kafkapkg "github.com/PesHwA07/Ascend-Finale/internal/kafka"
 	"github.com/PesHwA07/Ascend-Finale/internal/simulation"
 )
 
 // OutboxSyncer periodically drains unsynced operations from each node's
-// outbox table and writes them to the coordinator DB. If an operation
-// fails sync 5+ times, it's moved to the dead letter queue (DLQ).
+// outbox table and writes them to the coordinator DB (or publishes to Kafka).
+// If an operation fails sync 5+ times, it's moved to the dead letter queue (DLQ).
 type OutboxSyncer struct {
-	sim      *simulation.Simulation
-	bus      *events.Bus
-	interval time.Duration
+	sim           *simulation.Simulation
+	bus           *events.Bus
+	interval      time.Duration
+	kafkaProducer *kafkapkg.Producer // nil = direct DB write (SQLite mode)
+}
+
+// SetKafkaProducer configures the outbox syncer to publish to Kafka
+// instead of writing directly to the coordinator DB.
+func (o *OutboxSyncer) SetKafkaProducer(p *kafkapkg.Producer) {
+	o.kafkaProducer = p
+	log.Println("OutboxSyncer: Kafka producer attached — ops will flow through Kafka")
 }
 
 // NewOutboxSyncer creates a new outbox syncer agent.
@@ -75,16 +84,24 @@ func (o *OutboxSyncer) syncAllNodes() {
 
 		var synced, failed int
 		for _, op := range ops {
-			// 2. Try to write to coordinator
-			_, err := db.InsertOperation(coordDB, op)
-			if err != nil {
+			var syncErr error
+
+			if o.kafkaProducer != nil {
+				// Production mode: publish to Kafka topic
+				syncErr = o.kafkaProducer.Publish(op)
+			} else {
+				// Demo mode: write directly to coordinator DB
+				_, syncErr = db.InsertOperation(coordDB, op)
+			}
+
+			if syncErr != nil {
 				// Mark as failed, increment retry count
-				db.MarkOutboxFailed(nodeDB, op.OperationID, err.Error())
+				db.MarkOutboxFailed(nodeDB, op.OperationID, syncErr.Error())
 				failed++
 				continue
 			}
 
-			// 3. Mark as synced
+			// Mark as synced in the outbox
 			if err := db.MarkOutboxSynced(nodeDB, op.OperationID); err != nil {
 				log.Printf("OutboxSyncer: error marking %s synced: %v", op.OperationID, err)
 			}
