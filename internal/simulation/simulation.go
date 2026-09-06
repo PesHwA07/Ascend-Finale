@@ -50,6 +50,12 @@ func NewSimulation(cfg config.Config, coordDB *sql.DB) (*Simulation, error) {
 		}
 		s.nodeDBs = append(s.nodeDBs, nodeDB)
 
+		// Initialize outbox schema for transactional outbox pattern (v3)
+		if err := db.InitOutboxSchema(nodeDB); err != nil {
+			s.Close()
+			return nil, fmt.Errorf("init outbox schema %s: %w", nodeID, err)
+		}
+
 		n, err := node.NewNode(nodeID, nodeDB, coordDB)
 		if err != nil {
 			s.Close()
@@ -117,6 +123,19 @@ func (s *Simulation) Close() {
 		}
 	}
 	log.Println("Simulation shut down: all node DBs closed")
+}
+
+// AllNodeDBs returns a map of node_id → *sql.DB for all nodes.
+// Used by the OutboxSyncer agent to iterate over each node's outbox table.
+func (s *Simulation) AllNodeDBs() map[string]*sql.DB {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	result := make(map[string]*sql.DB, len(s.Nodes))
+	for _, n := range s.Nodes {
+		result[n.ID] = n.DB
+	}
+	return result
 }
 
 // GetCoordinatorOperations returns all operations from the coordinator DB.

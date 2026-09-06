@@ -69,7 +69,7 @@ The foundation: prove that a distributed counter can detect crash-induced data l
 | **Interactive Dashboard** | Single-page Chaos Panel with Scenario A/B buttons |
 | **7 REST API Endpoints** | Full programmatic control of the simulation |
 
-### v2.0 — Autonomous Agents & Observability _(current)_
+### v2.0 — Autonomous Agents & Observability
 Added self-healing agents, real-time event streaming, and advanced correctness features that go beyond basic crash-recover.
 
 | Feature | Description |
@@ -86,6 +86,19 @@ Added self-healing agents, real-time event streaming, and advanced correctness f
 | **Chaos Experiments** | 3 scripted multi-step experiments with pass/fail assertions |
 | **Chart.js Divergence Chart** | Live 3-line chart (naive, auth, divergence) with rolling 60-point window |
 | **3 New API Endpoints** | `POST /api/rebuild`, `GET /api/operations`, `GET /api/temporal` |
+
+### v3.0 — Production-Grade Patterns _(current)_
+Added production-ready data pipeline patterns and infrastructure scaffolding for Kafka + Postgres migration.
+
+| Feature | Description |
+|---|---|
+| **Transactional Outbox** | Atomic op + outbox write in one SQLite transaction; OutboxSyncer drains async |
+| **OutboxSyncer Agent** | 3rd autonomous agent — syncs outbox → coordinator every 3s |
+| **Audit Logging** | Every `apply`, `crash`, `reconcile`, `rebuild` action recorded with timestamp + details |
+| **Dead Letter Queue** | Outbox entries failing 5+ times moved to DLQ for manual inspection |
+| **3 New API Endpoints** | `GET /api/audit`, `GET /api/dlq`, `GET /api/outbox` |
+| **Docker Compose** | Kafka (KRaft) + Postgres 16 + Kafka UI scaffolding for Phase 2 migration |
+| **Postgres Schema** | Production-grade schema with JSONB, partial indexes, GIN indexes |
 
 ---
 
@@ -336,11 +349,81 @@ The **monitoring view** — watch autonomous agents detect and repair faults in 
 - System architecture flowchart (nodes → coordinator → agents)
 - Live divergence panel with peak tracking
 - Chart.js line chart (naive, auth, divergence over time)
-- Agent activity log with SENTINEL/RECONCILER badges
+- Agent activity log with SENTINEL/RECONCILER/OUTBOX_SYNCER badges
 - Invariant verification panel (I1–I6)
+
+---
+
+## 🔒 v3 Production Patterns (current)
+
+### Transactional Outbox
+Every `ApplyDelta` now writes **both** the operation and an outbox entry in a **single atomic SQLite transaction**. The OutboxSyncer agent asynchronously drains outbox entries to the coordinator, guaranteeing eventual consistency even if the coordinator is temporarily unreachable.
+
+```
+Node DB Transaction:
+  ┌─────────────────────────────────┐
+  │ INSERT INTO operations ...      │ ← counter operation
+  │ INSERT INTO operation_outbox ...│ ← outbox entry
+  │ [COMMIT]                        │ ← both succeed or both fail
+  └─────────────────────────────────┘
+       │
+       ▼ (async, every 3s)
+  OutboxSyncer → Coordinator DB
+```
+
+### Audit Trail
+Every state-mutating API call (`apply`, `crash`, `reconcile`, `rebuild`) is recorded in the `audit_log` table with timestamp, action, resource, and details. Query via `GET /api/audit`.
+
+### Dead Letter Queue
+Operations that fail outbox sync 5+ times are moved to the `dead_letter_queue` table for manual inspection instead of being retried forever. Query via `GET /api/dlq`.
+
+### New v3 API Endpoints
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/audit` | Query audit trail (filter by action, resource_id) |
+| `GET` | `/api/dlq` | View dead letter queue entries |
+| `GET` | `/api/outbox` | View outbox sync stats per node |
+
+---
+
+## 🚀 Production Roadmap
+
+### Phase 2: Kafka + Postgres (Docker Compose ready)
+> **Status**: Scaffolding complete (`docker-compose.yml` + `migrations/001_initial.sql`)
+
+| Component | What | Why |
+|---|---|---|
+| **Kafka** (KRaft) | Replace coordinator SQLite with Kafka topic | Multi-consumer, replayability, `acks=all` durability |
+| **Postgres** 16 | Replace per-node SQLite files | Concurrent writers (MVCC), PITR, JSONB manifests |
+| **Storage Interface** | `OperationStore` interface in Go | Swap SQLite ↔ Postgres without changing business logic |
+
+```bash
+# Start the production stack
+docker-compose up -d
+
+# Kafka UI at http://localhost:8090
+# Postgres at localhost:5432 (counterghost/counterghost_dev)
+```
+
+### Phase 3: Service Mesh (Istio)
+| Feature | What It Solves |
+|---|---|
+| **mTLS** | Encrypt all service-to-service communication |
+| **Circuit Breakers** | Prevent cascading failures when coordinator is overloaded |
+| **Retries with Backoff** | Centralized retry policy across all services |
+| **Distributed Tracing** | End-to-end latency visibility (Node → Coordinator → Postgres) |
+| **Rate Limiting** | Per-service quotas to prevent overload |
+
+### Phase 4: Horizontal Scaling
+| Feature | What It Enables |
+|---|---|
+| **Sharded Coordinators** | Consistent hashing: node → coordinator shard |
+| **Multi-Region** | us-east-1, us-west-2, eu-west-1 with cross-region Kafka |
+| **Prometheus + Grafana** | `counterghost_operations_total`, divergence gauge, outbox depth |
 
 ---
 
 ## 📜 License
 
 Built for the Ascend Hackathon.
+

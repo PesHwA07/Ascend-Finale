@@ -20,6 +20,12 @@ func setupTestNode(t *testing.T, nodeID string) (*node.Node, func()) {
 		t.Fatalf("open node DB: %v", err)
 	}
 
+	// Initialize outbox schema (required since v3 transactional outbox)
+	if err := db.InitOutboxSchema(nodeDB); err != nil {
+		nodeDB.Close()
+		t.Fatalf("init outbox schema: %v", err)
+	}
+
 	coordDB, err := db.OpenCoordinatorDB(dir)
 	if err != nil {
 		nodeDB.Close()
@@ -90,6 +96,9 @@ func TestDualWrite(t *testing.T) {
 		t.Fatalf("open node DB: %v", err)
 	}
 	defer nodeDB.Close()
+	if err := db.InitOutboxSchema(nodeDB); err != nil {
+		t.Fatalf("init outbox schema: %v", err)
+	}
 
 	coordDB, err := db.OpenCoordinatorDB(dir)
 	if err != nil {
@@ -169,6 +178,9 @@ func TestInsertDuplicateIgnored(t *testing.T) {
 		t.Fatalf("open node DB: %v", err)
 	}
 	defer nodeDB.Close()
+	if err := db.InitOutboxSchema(nodeDB); err != nil {
+		t.Fatalf("init outbox schema: %v", err)
+	}
 
 	coordDB, err := db.OpenCoordinatorDB(dir)
 	if err != nil {
@@ -213,6 +225,9 @@ func TestSequenceRecovery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open node DB: %v", err)
 	}
+	if err := db.InitOutboxSchema(nodeDB); err != nil {
+		t.Fatalf("init outbox schema: %v", err)
+	}
 
 	coordDB, err := db.OpenCoordinatorDB(dir)
 	if err != nil {
@@ -247,6 +262,9 @@ func TestSequenceRecovery(t *testing.T) {
 		t.Fatalf("reopen node DB: %v", err)
 	}
 	defer nodeDB2.Close()
+	if err := db.InitOutboxSchema(nodeDB2); err != nil {
+		t.Fatalf("init outbox schema (reopen): %v", err)
+	}
 
 	coordDB2, err := db.OpenCoordinatorDB(dir)
 	if err != nil {

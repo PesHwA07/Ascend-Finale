@@ -11,8 +11,10 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/PesHwA07/Ascend-Finale/internal/db"
 	"github.com/PesHwA07/Ascend-Finale/internal/events"
 	"github.com/PesHwA07/Ascend-Finale/internal/model"
 	"github.com/PesHwA07/Ascend-Finale/internal/simulation"
@@ -46,6 +48,28 @@ type applyResponse struct {
 // sim is the simulation engine providing node access and aggregation.
 // bus is the event bus for real-time WebSocket push to the dashboard.
 func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *events.Bus) error {
+	// auditAction logs a state-mutating action to the audit trail.
+	auditAction := func(action, resource, resourceID string, details map[string]interface{}, success bool, errMsg string) {
+		entry := db.AuditEntry{
+			Timestamp:  time.Now(),
+			Action:     action,
+			Resource:   resource,
+			ResourceID: resourceID,
+			Details:    details,
+			Success:    success,
+			ErrorMsg:   errMsg,
+		}
+		if err := db.InsertAuditLog(sim.CoordDB, entry); err != nil {
+			log.Printf("WARNING: audit log insert failed: %v", err)
+		}
+		bus.Publish(events.Event{
+			Type:    events.EventAuditLogged,
+			NodeID:  resourceID,
+			Message: fmt.Sprintf("AUDIT: %s %s/%s success=%v", action, resource, resourceID, success),
+			Data:    details,
+		})
+	}
+
 	// Serve the dashboard directory from the embedded FS.
 	// Sub into "dashboard" because the embed path includes the directory name.
 	sub, err := fs.Sub(dashboardFS, "dashboard")
@@ -153,6 +177,12 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *e
 			},
 		})
 
+		// Audit trail: log the apply action
+		auditAction("apply", "node", req.NodeID, map[string]interface{}{
+			"count":  len(ops),
+			"amount": req.Amount,
+		}, true, "")
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	})
@@ -197,6 +227,13 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *e
 				"new_epoch":       result.NewEpoch,
 			},
 		})
+
+		// Audit trail: log the crash action
+		auditAction("crash", "node", req.NodeID, map[string]interface{}{
+			"deleted_count": result.DeletedCount,
+			"old_epoch":     result.OldEpoch,
+			"new_epoch":     result.NewEpoch,
+		}, true, "")
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)
@@ -420,6 +457,116 @@ func Start(addr string, dashboardFS embed.FS, sim *simulation.Simulation, bus *e
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(result)
+	})
+
+	// -----------------------------------------------------------------------
+	// v3: Audit, DLQ, and Outbox API endpoints
+	// -----------------------------------------------------------------------
+
+	// GET /api/audit — query audit log entries
+	mux.HandleFunc("/api/audit", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		action := r.URL.Query().Get("action")
+		resourceID := r.URL.Query().Get("resource_id")
+		limit := 50
+		if l := r.URL.Query().Get("limit"); l != "" {
+			if parsed, err := strconv.Atoi(l); err == nil {
+				limit = parsed
+			}
+		}
+
+		entries, err := db.GetAuditLogs(sim.CoordDB, action, resourceID, limit)
+		if err != nil {
+			log.Printf("ERROR: get audit logs: %v", err)
+			http.Error(w, fmt.Sprintf("audit query failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"entries": entries,
+			"count":   len(entries),
+		})
+	})
+
+	// GET /api/dlq — view dead letter queue entries
+	mux.HandleFunc("/api/dlq", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		limit := 50
+		if l := r.URL.Query().Get("limit"); l != "" {
+			if parsed, err := strconv.Atoi(l); err == nil {
+				limit = parsed
+			}
+		}
+
+		entries, err := db.GetDLQEntries(sim.CoordDB, limit)
+		if err != nil {
+			log.Printf("ERROR: get DLQ entries: %v", err)
+			http.Error(w, fmt.Sprintf("DLQ query failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		count, _ := db.GetDLQCount(sim.CoordDB)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"entries":     entries,
+			"total_count": count,
+		})
+	})
+
+	// GET /api/outbox?node_id=node-0 — view outbox stats for a node
+	mux.HandleFunc("/api/outbox", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		nodeID := r.URL.Query().Get("node_id")
+		nodeDBS := sim.AllNodeDBs()
+
+		if nodeID != "" {
+			// Stats for a specific node
+			nodeDB, ok := nodeDBS[nodeID]
+			if !ok {
+				http.Error(w, fmt.Sprintf("node %s not found", nodeID), http.StatusNotFound)
+				return
+			}
+			stats, err := db.GetOutboxStats(nodeDB)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("outbox stats failed: %v", err), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"node_id": nodeID,
+				"stats":   stats,
+			})
+			return
+		}
+
+		// Stats for all nodes
+		allStats := make(map[string]*db.OutboxStats)
+		for id, nodeDB := range nodeDBS {
+			stats, err := db.GetOutboxStats(nodeDB)
+			if err != nil {
+				continue
+			}
+			allStats[id] = stats
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"nodes": allStats,
+		})
 	})
 
 	log.Printf("HTTP server listening on %s", addr)

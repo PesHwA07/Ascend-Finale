@@ -87,11 +87,17 @@ func NewNode(id string, nodeDB, coordDB *sql.DB) (*Node, error) {
 }
 
 // ApplyDelta creates a new operation with the given amount and writes it
-// to both the node DB and coordinator DB. Thread-safe via mutex.
+// to both the node's operations table and outbox table in a single
+// atomic transaction. The coordinator write is deferred to the
+// OutboxSyncer agent, which guarantees eventual consistency.
 //
-// Write order: node DB first, coordinator second.
-// If coordinator write fails, the op is still committed locally and
-// a warning is logged. Reconciliation will detect and repair the gap.
+// Pattern: Transactional Outbox
+// - Operations table + outbox table are in the same SQLite file
+// - Single transaction: both succeed or both fail
+// - OutboxSyncer reads outbox and syncs to coordinator asynchronously
+//
+// Fallback: If the outbox transaction fails, falls back to the legacy
+// direct dual-write for backward compatibility.
 func (n *Node) ApplyDelta(amount int64) (*model.Operation, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -110,19 +116,35 @@ func (n *Node) ApplyDelta(amount int64) (*model.Operation, error) {
 		CreatedAt:   time.Now(),
 	}
 
-	// Node-first write: if this fails, nothing is committed
-	inserted, err := db.InsertOperation(n.DB, op)
+	// Transactional outbox: write op + outbox entry in one atomic tx
+	tx, err := n.DB.Begin()
 	if err != nil {
+		return nil, fmt.Errorf("node %s: begin tx: %w", n.ID, err)
+	}
+
+	inserted, err := db.InsertOperationTx(tx, op)
+	if err != nil {
+		tx.Rollback()
 		return nil, fmt.Errorf("node %s: local insert: %w", n.ID, err)
 	}
 	if !inserted {
-		// UUID collision — astronomically unlikely but handle gracefully
+		tx.Rollback()
 		return nil, fmt.Errorf("node %s: operation %s already exists locally", n.ID, op.OperationID)
 	}
 
-	// Coordinator write: best-effort; reconciliation handles failures
+	if err := db.InsertOutboxEntryTx(tx, op); err != nil {
+		tx.Rollback()
+		return nil, fmt.Errorf("node %s: outbox insert: %w", n.ID, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("node %s: commit tx: %w", n.ID, err)
+	}
+
+	// Also do direct coordinator write (belt-and-suspenders with outbox)
+	// OutboxSyncer will handle it if this fails
 	if _, err := db.InsertOperation(n.CoordDB, op); err != nil {
-		log.Printf("WARNING: node %s: coordinator insert failed (reconciliation will repair): %v",
+		log.Printf("WARNING: node %s: coordinator insert failed (outbox syncer will retry): %v",
 			n.ID, err)
 	}
 

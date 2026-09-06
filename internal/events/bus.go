@@ -31,6 +31,13 @@ const (
 	EventChaosExperimentRun EventType = "chaos_experiment_run"
 	EventTemporalQuery      EventType = "temporal_query"
 
+	// Outbox pattern (v3)
+	EventOutboxSynced     EventType = "outbox_synced"
+	EventOutboxPoisonPill EventType = "outbox_poison_pill"
+
+	// Audit (v3)
+	EventAuditLogged EventType = "audit_logged"
+
 	// Metrics
 	EventMetricsSnapshot EventType = "metrics_snapshot"
 )

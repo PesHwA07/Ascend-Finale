@@ -41,6 +41,15 @@ func main() {
 	defer coordDB.Close()
 	log.Println("Coordinator DB ready")
 
+	// 3b. Initialize audit and DLQ schemas on the coordinator DB (v3)
+	if err := db.InitAuditSchema(coordDB); err != nil {
+		log.Fatalf("Failed to init audit schema: %v", err)
+	}
+	if err := db.InitDLQSchema(coordDB); err != nil {
+		log.Fatalf("Failed to init DLQ schema: %v", err)
+	}
+	log.Println("Audit + DLQ schemas ready")
+
 	// 4. Initialize simulation — creates per-node DBs and node engines,
 	//    recovering any existing state from durable storage.
 	sim, err := simulation.NewSimulation(cfg, coordDB)
@@ -66,10 +75,13 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sentinel := agents.NewSentinel(sim, bus, 0)  // 0 → default 2s interval
-	reconciler := agents.NewReconciler(sim, bus, 0) // 0 → default 5s interval
+	sentinel := agents.NewSentinel(sim, bus, 0)      // 0 → default 5s interval
+	reconciler := agents.NewReconciler(sim, bus, 0)   // 0 → default 10s interval
+	outboxSyncer := agents.NewOutboxSyncer(sim, bus, 0) // 0 → default 3s interval
 	go sentinel.Start(ctx)
 	go reconciler.Start(ctx)
+	go outboxSyncer.Start(ctx)
+	log.Println("Agents started: Sentinel, Reconciler, OutboxSyncer")
 
 	// 7. Start HTTP server (blocks)
 	addr := fmt.Sprintf(":%d", cfg.Port)
